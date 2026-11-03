@@ -64,7 +64,7 @@ input{width:100%;margin-top:4px;padding:9px 10px;font:inherit;color:var(--ink);
 
 <section id="login">
   <h2>로그인</h2>
-  <p>관리자가 만들어 준 계정으로 로그인하세요.</p>
+  <p>테스트 버전 · 샘플 데이터가 표시됩니다.</p>
   <form id="loginForm">
     <label>아이디<input id="uid" autocomplete="username" required></label>
     <label>비밀번호<input id="pw" type="password" autocomplete="current-password" required></label>
@@ -85,51 +85,48 @@ input{width:100%;margin-top:4px;padding:9px 10px;font:inherit;color:var(--ink);
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
-  from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc, getDoc, updateDoc, deleteDoc }
-  from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+/* ===== 테스트용 관리자 계정 (페이지 소스에 그대로 보이므로 테스트에만 사용) ===== */
+const ADMIN_ID = "northkca";
+const ADMIN_PW = "qnrtjdnf1!";
+/* ================================================================== */
 
-/* ===== Firebase 콘솔 > 프로젝트 설정 > 웹 앱의 값으로 교체 ===== */
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT",
-  appId: "YOUR_APP_ID"
-};
-const ID_DOMAIN = "signalguard.app"; // 계정 생성 시 아이디@이 도메인 으로 등록
-/* ============================================================= */
-
-const auth = getAuth(initializeApp(firebaseConfig));
-const db = getFirestore();
 const $ = id => document.getElementById(id);
-let isAdmin = false, unsub = null, map = null, layer = null, fitted = false;
+let isAdmin = false, map = null, layer = null, fitted = false;
 
-$("loginForm").addEventListener("submit", async e => {
+/* 테스트용 샘플 데이터 (실제 앱 연동 전까지 사용) */
+const PLACES = [
+  ["설악산", 38.12, 128.46], ["지리산", 35.33, 127.73], ["한라산", 33.36, 126.53],
+  ["울릉도 해상", 37.50, 130.90], ["서해 덕적도 해상", 37.23, 126.15], ["태백산", 37.10, 128.92]
+];
+function makeSample() {
+  const out = [], now = Date.now();
+  for (let i = 0; i < 30; i++) {
+    const p = PLACES[i % 6], rsrp = -(105 + (i * 7) % 30);
+    out.push({
+      id: "s" + i,
+      ts: now - Math.floor(i / 3) * 86400000 - ((i * 37) % 600) * 60000,
+      rsrp, level: rsrp <= -120 ? "위험" : rsrp <= -110 ? "주의" : "양호",
+      region: p[0], lat: p[1] + ((i * 13) % 10) / 1000, lng: p[2] + ((i * 17) % 10) / 1000,
+      memo: i % 5 === 0 ? "테스트 메모" : ""
+    });
+  }
+  return out;
+}
+let DATA = makeSample();
+
+$("loginForm").addEventListener("submit", e => {
   e.preventDefault();
   $("loginErr").textContent = "";
-  try {
-    await signInWithEmailAndPassword(auth, $("uid").value.trim().toLowerCase() + "@" + ID_DOMAIN, $("pw").value);
-  } catch { $("loginErr").textContent = "아이디 또는 비밀번호가 올바르지 않습니다."; }
-});
-$("logout").addEventListener("click", () => signOut(auth));
-
-onAuthStateChanged(auth, async user => {
-  if (unsub) { unsub(); unsub = null; }
-  if (!user) { show(false); return; }
-  let role = null;
-  try { const s = await getDoc(doc(db, "users", user.uid)); role = s.exists() ? s.data().role : null; } catch {}
-  if (role !== "admin" && role !== "viewer") {
-    $("loginErr").textContent = "이 계정은 조회 권한이 없습니다.";
-    await signOut(auth); return;
+  if ($("uid").value.trim() === ADMIN_ID && $("pw").value === ADMIN_PW) {
+    if (typeof L === "undefined") { $("loginErr").textContent = "지도 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하세요."; return; }
+    isAdmin = true;
+    $("whoText").textContent = ADMIN_ID + " (관리자)";
+    show(true); initMap(); fitted = false; render(DATA);
+  } else {
+    $("loginErr").textContent = "아이디 또는 비밀번호가 올바르지 않습니다.";
   }
-  isAdmin = role === "admin";
-  $("whoText").textContent = user.email.split("@")[0] + (isAdmin ? " (관리자)" : "");
-  show(true); initMap(); fitted = false;
-  unsub = onSnapshot(query(collection(db, "records"), orderBy("ts", "desc"), limit(500)),
-    snap => render(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
 });
+$("logout").addEventListener("click", () => { $("pw").value = ""; show(false); });
 
 function show(on) {
   $("login").classList.toggle("hidden", on);
@@ -164,9 +161,9 @@ function popup(r) {
   if (isAdmin) {
     const a = document.createElement("div"); a.className = "acts";
     const m = document.createElement("button"); m.textContent = "메모";
-    m.onclick = async () => { const v = prompt("메모 입력", r.memo || ""); if (v !== null) await updateDoc(doc(db, "records", r.id), { memo: v }); };
+    m.onclick = async () => { const v = prompt("메모 입력", r.memo || ""); if (v !== null) { r.memo = v; map.closePopup(); render(DATA); } };
     const x = document.createElement("button"); x.textContent = "삭제";
-    x.onclick = async () => { if (confirm("이 기록을 삭제할까요?")) await deleteDoc(doc(db, "records", r.id)); };
+    x.onclick = async () => { if (confirm("이 기록을 삭제할까요?")) { DATA = DATA.filter(x => x.id !== r.id); map.closePopup(); render(DATA); } };
     a.append(m, x); el.appendChild(a);
   }
   return el;
