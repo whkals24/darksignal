@@ -43,7 +43,13 @@ header .status{color:rgba(255,255,255,.8)}
 
 /* 지도 화면 */
 .wrap{flex:1;min-height:0;display:flex}
-#map{flex:1;min-width:0}
+.mapbox{flex:1;min-width:0;min-height:0;position:relative}
+#map{position:absolute;inset:0}
+#mapBack{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:1000;display:flex;align-items:center;gap:8px;
+  padding:9px 16px;border-radius:99px;border:0;background:var(--brand);color:#fff;font-weight:600;font-size:14px;
+  box-shadow:0 2px 10px rgba(0,0,0,.35);cursor:pointer;white-space:nowrap}
+#mapBack small{font-weight:400;opacity:.85;font-size:12px}
+#mapBack:hover{filter:brightness(1.1)}
 #side{width:290px;flex:none;overflow:auto;background:var(--panel);border-left:1px solid var(--line);padding:14px}
 .sum{display:flex;gap:10px;margin-bottom:14px}
 .sum .tile{flex:1;background:var(--bg);border:0;border-radius:10px;padding:10px 12px;text-align:left;font:inherit;color:inherit;display:block}
@@ -77,7 +83,7 @@ header .status{color:rgba(255,255,255,.8)}
   .wrap{flex-direction:column}
   #side{width:100%;max-height:42%;border-left:0;border-top:1px solid var(--line)}
 }
-.pop{min-width:170px;line-height:1.6}
+.pop{min-width:200px;line-height:1.6}
 .pop b{font-size:15px}
 .pop .row{color:#333}
 .pop .acts{margin-top:6px}
@@ -160,7 +166,11 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
 
 <!-- 메인: 지도 -->
 <div class="wrap hidden" id="wrap">
-  <div id="map"></div>
+  <div class="mapbox">
+    <div id="map"></div>
+    <!-- 날짜를 골랐거나 최저 RSRP 칸으로 이동한 상태에서만 보이는 "전체 보기로 돌아가기" 버튼 -->
+    <button id="mapBack" class="hidden" type="button">← 전체 보기 <small id="mapBackL"></small></button>
+  </div>
   <aside id="side">
     <div class="sum">
       <button class="tile" id="tileTotal" title="상세 데이터 표로 이동"><b id="sTotal">0</b><span id="sTotalL">전체 기록</span><em>상세 데이터 보기 ›</em></button>
@@ -701,7 +711,10 @@ function popup(r) {
   line("시각", fmt(toDate(r.ts)));
   line("단계", LEVELS[r.level][0]);
   line("RSRQ / SINR", v(r.rsrq) + " / " + v(r.sinr));
-  if (r.count > 1) line("이 장소", `${r.count}건 · 최저 ${v(r.rsrp)} / 최고 ${v(r.bestRsrp)} dBm`);
+  if (r.count > 1) { // 같은 장소에 여러 건이 합쳐진 기록: 최저 / 최고 값을 한 줄로
+    line("RSRP", `최저 ${v(r.rsrp)} / 최고 ${v(r.bestRsrp)} dBm`);
+    el.lastChild.style.whiteSpace = "nowrap";
+  }
   if (r.op) line("통신사", r.op + " " + (RAT[r.rat] || ""));
   if (r.region) line("지역", r.region);
   if (r.address) line("주소", r.address);
@@ -784,6 +797,8 @@ function draw() {
   if (!keys.length) { const li = document.createElement("li"); li.style.border = "0"; li.textContent = "기록이 없습니다."; ul.appendChild(li); }
 
   const shown = selDay ? all.filter(r => dayKey(r) === selDay) : all;
+  $("mapBack").classList.toggle("hidden", !selDay);
+  if (selDay) $("mapBackL").textContent = selDay.slice(5).replace("-", "/") + " 보는 중";
   $("sTotal").textContent = shown.length;
   $("sTotalL").textContent = selDay ? selDay.slice(5).replace("-", "/") + " 기록" : "전체 기록";
   // 최저 RSRP: 날짜를 고르지 않았으면 "가장 최신 날짜"의 최저값, 골랐으면 그 날짜의 최저값.
@@ -842,7 +857,9 @@ $("tileTotal").addEventListener("click", () => {
   drawTable();
   setView("detail");
 });
-$("allDays").addEventListener("click", () => { selDay = null; hitId = null; fitted = false; draw(); });
+const backToAll = () => { selDay = null; hitId = null; fitted = false; draw(); };
+$("allDays").addEventListener("click", backToAll);
+$("mapBack").addEventListener("click", backToAll); // 지도 위 버튼 — 전체 보기로 돌아가기
 
 /* ---------- 상세 데이터 표 ---------- */
 const COLS = [
@@ -1018,7 +1035,7 @@ function showInfo(r) {
   if (r.count > 1) {
     const t = ts => toDate(ts).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
     add("같은 장소 머문 기록", `${r.count}건 (${t(r.firstTs)} ~ ${t(r.lastTs)})`);
-    add("최저 → 최고", `RSRP ${v(r.rsrp)} → ${v(r.bestRsrp)} dBm` + (r.best ? ` · 최고일 때 ${(LEVELS[r.best.alertLevel] || LEVELS.UNKNOWN)[0]}` : ""));
+    add("RSRP 최저 / 최고", `${v(r.rsrp)} / ${v(r.bestRsrp)} dBm`).style.whiteSpace = "nowrap";
   }
   add("서비스 상태", SERVICE[r.service] || "-");
   add("통신사 / PLMN", v(r.op) + " / " + v(r.plmn));
