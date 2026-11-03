@@ -247,7 +247,7 @@ function makeSample() {
 /* ---------- GitHub 연동 ---------- */
 const CFG_KEY = "sg_cfg";
 /* 기본 연동 대상 (비밀이 아님). 토큰만 각자 브라우저에서 입력하면 된다. */
-const DEFAULT_CFG = { owner: "whkals24", repo: "darksignal-data", branch: "main", path: "data", token: "" };
+const DEFAULT_CFG = { owner: "whkals24", repo: "darksignal1", branch: "main", path: "data", token: "" };
 const getCfg = () => {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch {}
