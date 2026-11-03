@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SignalGuard 음영 현황</title>
+<title>음영현황</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 :root{--bg:#eef1ef;--panel:#fff;--ink:#18262e;--sub:#5d6d75;--line:#d5dcd9;
@@ -50,7 +50,10 @@ header .status{color:rgba(255,255,255,.8)}
 .sum b{display:block;font-size:24px;line-height:1.2}.sum span{display:block;font-size:12px;color:var(--sub)}
 .sum button.tile{cursor:pointer;border:1px solid transparent}
 .sum button.tile:hover{border-color:var(--brand)}
-.sum .tile em{display:block;margin-top:2px;font-size:11px;font-style:normal;color:var(--brand)}
+.sum .tile{min-width:0}
+.sum .tile em{display:block;margin-top:2px;font-size:11px;font-style:normal;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sum button.tile:disabled{cursor:default;opacity:.75}
+.sum button.tile:disabled:hover{border-color:transparent}
 .sidehead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 #side h2{font-size:14px;margin:0}
 .sidehead button{font-size:12px;padding:2px 8px}
@@ -129,7 +132,7 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
 </head>
 <body>
 <header>
-  <h1>SignalGuard 음영 현황 <small id="ver" style="font-weight:400;font-size:11px;opacity:.7"></small></h1>
+  <h1>음영현황 <small id="ver" style="font-weight:400;font-size:13px;opacity:.85"></small></h1>
   <nav class="hidden" id="nav">
     <button data-view="map" class="on">지도 현황</button>
     <button data-view="detail">상세 데이터</button>
@@ -160,7 +163,7 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
   <aside id="side">
     <div class="sum">
       <button class="tile" id="tileTotal" title="상세 데이터 표로 이동"><b id="sTotal">0</b><span id="sTotalL">전체 기록</span><em>상세 데이터 보기 ›</em></button>
-      <div class="tile"><b id="sMin">-</b><span>최저 RSRP (dBm)</span></div>
+      <button class="tile" id="tileMin" title="지도에서 그 위치 보기"><b id="sMin">-</b><span id="sMinL">최저 RSRP (dBm)</span><em id="sMinW">&nbsp;</em></button>
     </div>
     <div class="sidehead"><h2>날짜별 현황</h2><button id="allDays">전체 보기</button></div>
     <ul id="days"></ul>
@@ -221,8 +224,8 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
 const $ = id => document.getElementById(id);
-const BUILD = "v6 · 카카오맵"; // 화면 제목 옆에 표시 — 어느 버전이 열려 있는지 확인용
-$("ver").textContent = BUILD;
+// 제목 옆에 지금 실제로 쓰고 있는 지도 이름을 표시한다 (카카오맵을 못 불러와 OpenStreetMap으로 바뀌면 그대로 보인다)
+const showMapName = () => { $("ver").textContent = M ? (M.kind === "kakao" ? "카카오맵" : M.kind === "osm" ? "OpenStreetMap" : "") : ""; };
 let isAdmin = false, viaProxy = false, M = null, mapNote = "", fitted = false, timer = null;
 
 /* ---------- 데이터 형식 ----------
@@ -364,6 +367,7 @@ async function load(manual = false) {
   try {
     const r = await fetchRecords();
     const stamp = `${r.files}개 파일 · ${r.list.length}건 · ${new Date().toLocaleTimeString("ko-KR")}`;
+    lastStamp = stamp;
     $("srcStatus").textContent = stamp + mapNote;
     if (!manual && r.signature === lastSignature) return; // 바뀐 것이 없으면 화면은 그대로 둔다 (지도 위치·선택 유지)
     const first = lastSignature === "";
@@ -385,6 +389,7 @@ async function start() {
   $("nav").classList.remove("hidden");
   setView("map");
   await initMap();
+  showMapName();
   load(true);
   clearInterval(timer); timer = setInterval(() => load(false), 60000);
 }
@@ -436,6 +441,7 @@ function makeKakaoMap() {
   const pos = (la, lo) => new kk.LatLng(la, lo);
   const open = r => { info.setContent(popup(r)); info.setPosition(pos(r.lat, r.lng)); info.open(map); };
   return {
+    kind: "kakao",
     init(el) {
       map = new kk.Map(el, { center: pos(36.5, 127.8), level: 13 });
       info = new kk.InfoWindow({ removable: true, zIndex: 5 });
@@ -467,6 +473,7 @@ function makeKakaoMap() {
       open(r); return true;
     },
     closePopup() { info.close(); },
+    destroy() { overlays.forEach(o => o.setMap(null)); overlays = []; info.close(); },
     resize() { map && map.relayout(); }
   };
 }
@@ -475,6 +482,7 @@ function makeLeafletMap() {
   let map, layer;
   const byId = new Map();
   return {
+    kind: "osm",
     init(el) {
       map = L.map(el).setView([36.5, 127.8], 7);
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "© OpenStreetMap" }).addTo(map);
@@ -495,11 +503,25 @@ function makeLeafletMap() {
       mk.openPopup(); return true;
     },
     closePopup() { map.closePopup(); },
+    destroy() { map.remove(); },
     resize() { map && map.invalidateSize(); }
   };
 }
 
-const makeNoMap = () => ({ init() {}, ready: async () => false, clear() {}, add() {}, fit() {}, focus: () => false, closePopup() {}, resize() {} });
+const makeNoMap = () => ({ init() {}, ready: async () => false, clear() {}, add() {}, fit() {}, focus: () => false, closePopup() {}, destroy() {}, resize() {} });
+let lastStamp = "";
+
+/** 지도를 지금 설정(키)에 맞게 다시 만든다 — 관리 탭에서 키를 저장하면 새로고침 없이 바로 바뀐다. */
+async function switchMap() {
+  try { M && M.destroy(); } catch {}
+  M = null; $("map").innerHTML = "";
+  await initMap();
+  showMapName();
+  fitted = false;
+  draw();
+  setView(view);
+  $("srcStatus").textContent = lastStamp + mapNote;
+}
 
 const toDate = t => new Date(t);
 const fmt = d => d.toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit",
@@ -614,9 +636,10 @@ async function adminCall(body) {
 
 /* ---------- 좌표 → 주소 ---------- */
 /* 카카오 지도 SDK(services 라이브러리)를 필요할 때 한 번만 불러온다. 브라우저에서는 JavaScript 키 + 등록된 사이트 도메인으로 동작한다. */
-let kakaoReady = null;
+let kakaoReady = null, loadedKakaoKey = "";
 function loadKakao(key) {
   if (kakaoReady) return kakaoReady;
+  loadedKakaoKey = key;
   return kakaoReady = new Promise((resolve, reject) => {
     const s = document.createElement("script");
     s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(key)}&libraries=services&autoload=false`;
@@ -756,8 +779,22 @@ function draw() {
   const shown = selDay ? all.filter(r => dayKey(r) === selDay) : all;
   $("sTotal").textContent = shown.length;
   $("sTotalL").textContent = selDay ? selDay.slice(5).replace("-", "/") + " 기록" : "전체 기록";
-  const mins = shown.map(r => r.rsrp).filter(x => x !== null);
-  $("sMin").textContent = mins.length ? Math.min(...mins) : "-";
+  // 최저 RSRP: 날짜를 고르지 않았으면 "가장 최신 날짜"의 최저값, 골랐으면 그 날짜의 최저값.
+  // 이 칸을 누르면 지도가 그 기록의 위치로 이동하고 시각·장소 팝업이 열린다.
+  const minDay = selDay || keys[0] || null;
+  minRec = null;
+  for (const r of all) {
+    if (dayKey(r) !== minDay || r.rsrp === null) continue;
+    if (!minRec || r.rsrp < minRec.rsrp) minRec = r;
+  }
+  $("sMin").textContent = minRec ? minRec.rsrp : "-";
+  $("sMinL").textContent = minDay ? "최저 RSRP · " + minDay.slice(5).replace("-", "/") : "최저 RSRP (dBm)";
+  $("sMinW").innerHTML = "&nbsp;";
+  if (minRec) {
+    const hhmm = toDate(minRec.ts).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+    $("sMinW").textContent = `${hhmm} · ${minRec.address || minRec.region || "위치 보기"} ›`;
+  }
+  $("tileMin").disabled = !minRec || minRec.lat === null;
 
   if (!M) return; // 지도가 아직 준비되지 않았으면 목록만 그린다 (준비 후 load 가 다시 그림)
   M.clear();
@@ -776,6 +813,17 @@ const rsrpClass = v => v === null || v === undefined ? "none" : v <= -120 ? "bad
 function focusRecord(r) {
   if (M) M.focus(r);
 }
+
+/* 최저 RSRP 칸을 누르면 지도에서 그 기록(어디·언제)을 보여준다. 좁은 화면에서는 지도가 보이도록 스크롤한다. */
+let minRec = null;
+$("tileMin").addEventListener("click", () => {
+  if (!minRec) return;
+  setView("map");
+  const shownOnMap = !selDay || dayKey(minRec) === selDay; // 선택한 날짜 지도에는 그 날짜 기록만 그려져 있다
+  if (!shownOnMap) { selDay = dayKey(minRec); fitted = false; draw(); }
+  focusRecord(minRec);
+  $("map").scrollIntoView({ block: "nearest", behavior: "smooth" });
+});
 
 /* 전체 기록 칸을 누르면 상세 데이터 표로 이동 (날짜를 선택해 둔 상태면 그 날짜만 필터) */
 $("tileTotal").addEventListener("click", () => {
@@ -1053,11 +1101,18 @@ $("gBtn").onclick = async () => {
 
 /* 카카오 JavaScript 키: 이 브라우저에만 저장. 카카오 앱 설정에서 이 사이트 도메인만 허용해 두면 노출돼도 다른 곳에서 못 쓴다. */
 $("kakaoKey").value = localStorage.getItem(KAKAO_KEY) || "";
-$("kakaoSave").onclick = () => {
-  const k = $("kakaoKey").value.trim();
+$("kakaoSave").onclick = async () => {
+  const k = $("kakaoKey").value.trim(), msg = $("kakaoMsg");
   k ? localStorage.setItem(KAKAO_KEY, k) : localStorage.removeItem(KAKAO_KEY);
-  kakaoReady = null; // 키가 바뀌면 SDK 를 새 키로 다시 불러온다 (이미 불러온 SDK 는 페이지를 새로고침해야 교체됨)
-  $("kakaoMsg").textContent = k ? "저장했습니다. 페이지를 새로고침하면 지도도 카카오맵으로 바뀝니다." : "삭제했습니다. (키가 없으면 지도와 주소 변환에 OpenStreetMap을 씁니다)";
+  // 다른 키로 이미 불러온 카카오 SDK 는 교체할 수 없어서, 그 경우에만 페이지를 새로 읽는다.
+  if (window.kakao?.maps && loadedKakaoKey && k !== loadedKakaoKey) { msg.textContent = "키가 바뀌어 페이지를 새로 읽습니다..."; location.reload(); return; }
+  kakaoReady = null;
+  $("kakaoSave").disabled = true; msg.textContent = "지도를 바꾸는 중...";
+  await switchMap(); // 새로고침 없이 지금 바로 지도를 바꾼다
+  $("kakaoSave").disabled = false;
+  msg.textContent = !k ? "키를 지웠습니다. OpenStreetMap으로 표시합니다."
+    : mapNote ? "카카오맵으로 바꾸지 못했습니다" + mapNote
+    : "저장했습니다. 지도가 카카오맵으로 바뀌었습니다.";
 };
 
 /* ---------- 같은 장소 합치기 (앱의 GitHubUploader.collapseSamePlace 와 같은 규칙) ---------- */
