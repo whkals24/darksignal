@@ -35,6 +35,8 @@ label{display:block;font-size:13px;color:var(--sub);margin-top:12px}
 input,select{width:100%;margin-top:4px;padding:9px 10px;font:inherit;color:var(--ink);
   background:var(--bg);border:1px solid var(--line);border-radius:6px}
 #login button[type=submit]{width:100%;margin-top:18px;background:var(--brand);color:#fff;border:0;padding:10px}
+label.chk{display:flex;gap:6px;align-items:center;margin-top:10px}
+label.chk input{width:auto;margin:0}
 .err{color:var(--bad);font-size:13px;margin-top:10px;min-height:1.2em}
 .status{font-size:12px;color:var(--sub)}
 header .status{color:rgba(255,255,255,.8)}
@@ -82,6 +84,25 @@ tbody tr.sel{outline:2px solid var(--brand);outline-offset:-2px}
 #info dl{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 16px;margin:0}
 #info dt{font-size:12px;color:var(--sub)}#info dd{margin:0 0 4px;font-weight:600;word-break:break-all}
 
+/* 편집 폼 */
+form.edit{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:4px 16px;margin-top:10px}
+form.edit label{margin:0}
+form.edit .row{grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}
+/* 관리 화면 */
+#adminView{flex:1;min-height:0;overflow:auto;padding:12px 16px;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.card h2{margin:0 0 4px;font-size:15px}
+.card .row{display:flex;gap:8px;margin:8px 0;flex-wrap:wrap}
+.card .row input{flex:1;min-width:200px;margin:0}
+.card .row select{width:auto;margin:0}
+.tablebox.small{flex:none;max-height:260px;margin-top:8px}
+#denied{max-width:380px;width:calc(100% - 32px);margin:12vh auto;padding:24px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+#denied h2{margin:0 0 8px;font-size:20px}
+/* 관리자 전용 요소: 관리자가 아니면 숨김 */
+body:not(.admin) .adm{display:none}
+.danger{color:var(--bad);border-color:var(--bad)}
+.danger:disabled{opacity:.4;cursor:default}
+td.adm,th.adm{width:32px}
 /* 연동 설정 */
 dialog{border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);width:min(420px,calc(100% - 32px));padding:20px}
 dialog::backdrop{background:rgba(0,0,0,.45)}
@@ -97,22 +118,23 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
   <nav class="hidden" id="nav">
     <button data-view="map" class="on">지도 현황</button>
     <button data-view="detail">상세 데이터</button>
+    <button data-view="admin" class="adm">관리</button>
   </nav>
   <div class="who hidden" id="who">
     <span class="status" id="srcStatus"></span>
     <button id="refresh" title="데이터 새로고침">새로고침</button>
-    <button id="cfgBtn">GitHub 연동</button>
     <span id="whoText"></span><button id="logout">로그아웃</button>
   </div>
 </header>
 
-<section id="login">
-  <h2>로그인</h2>
-  <p>SignalGuard 앱이 수집한 신호 기록을 확인합니다.</p>
+<!-- 연결: darksignal1 저장소의 GitHub 토큰을 입력한다. 이 페이지에는 토큰이 들어 있지 않다. -->
+<section id="login" class="hidden">
+  <h2>저장소 연결</h2>
+  <p>darksignal1 저장소에 접근할 수 있는 GitHub 토큰을 입력하세요.<br>쓰기 권한이 있는 토큰이면 데이터를 편집할 수 있습니다.</p>
   <form id="loginForm">
-    <label>아이디<input id="uid" autocomplete="username" required></label>
-    <label>비밀번호<input id="pw" type="password" autocomplete="current-password" required></label>
-    <button type="submit">로그인</button>
+    <label>GitHub 토큰<input id="token" type="password" autocomplete="off" required></label>
+    <label class="chk"><input id="keep" type="checkbox" checked> 이 기기에서 유지</label>
+    <button type="submit" id="loginBtn">연결</button>
     <div class="err" id="loginErr"></div>
   </form>
 </section>
@@ -136,6 +158,7 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
     <label>단계<select id="fLv"><option value="">전체</option></select></label>
     <label class="grow">검색 (주소·지역·셀ID)<input id="fQ" type="search" placeholder="예: 설악산"></label>
     <button id="csv">CSV 저장</button>
+    <button id="delSel" class="adm danger" disabled>선택 삭제 (0)</button>
   </div>
   <div class="status" id="count"></div>
   <div class="tablebox"><table>
@@ -145,32 +168,35 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
   <div id="info" class="hidden"></div>
 </div>
 
-<dialog id="cfg">
-  <form method="dialog" id="cfgForm">
-    <h2>GitHub 연동</h2>
-    <p>앱이 올린 <code>data/기기ID/날짜.json</code> 파일들을 모두 읽어 합칩니다 (경로 칸에 <code>.json</code> 파일을 적으면 그 파일만 읽음). 소유자·저장소를 비워두면 이 페이지와 같은 저장소의 <code>data/records.json</code>을 읽습니다 (GitHub Pages).</p>
-    <label>소유자 (owner)<input id="cOwner" placeholder="예: myname"></label>
-    <label>저장소 (repo)<input id="cRepo" placeholder="예: signalguard-data"></label>
-    <label>브랜치<input id="cBranch" placeholder="main"></label>
-    <label>파일 경로<input id="cPath" placeholder="data (폴더) 또는 파일.json"></label>
-    <label>토큰 (비공개 저장소만, 읽기 전용 권장)<input id="cToken" type="password" autocomplete="off"></label>
-    <p>토큰은 이 브라우저(localStorage)에만 저장됩니다.</p>
-    <div class="btns">
-      <button type="button" id="cCancel">취소</button>
-      <button type="submit" class="pri">저장 후 불러오기</button>
+<!-- 메뉴: 관리 (관리자 전용) -->
+<div id="adminView" class="hidden">
+  <section class="card">
+    <h2>주소 매칭</h2>
+    <p class="status" id="gStat"></p>
+    <div class="row">
+      <input id="kakaoKey" type="password" autocomplete="off" placeholder="카카오 JavaScript 키 (없으면 OpenStreetMap 사용)">
+      <button id="kakaoSave" type="button">키 저장</button>
     </div>
-  </form>
-</dialog>
+    <div class="status" id="kakaoMsg"></div>
+    <button id="gBtn">주소 없는 기록 매칭</button>
+    <div class="status" id="gMsg"></div>
+  </section>
+
+  <section class="card">
+    <h2>데이터 관리</h2>
+    <p class="status">하루치 기록을 통째로 삭제합니다. 개별 기록은 상세 데이터에서 선택해 삭제하세요. 삭제는 되돌릴 수 없습니다.</p>
+    <div class="tablebox small"><table>
+      <thead><tr><th>기기 ID</th><th>날짜</th><th class="n">건수</th><th class="n">주소 매칭</th><th></th></tr></thead>
+      <tbody id="dBody"></tbody>
+    </table></div>
+    <div class="status" id="dMsg"></div>
+  </section>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
-/* ===== 테스트용 관리자 계정 (페이지 소스에 그대로 보이므로 테스트에만 사용) ===== */
-const ADMIN_ID = "northkca";
-const ADMIN_PW = "qnrtjdnf1!";
-/* ================================================================== */
-
 const $ = id => document.getElementById(id);
-let isAdmin = false, map = null, layer = null, fitted = false, timer = null;
+let isAdmin = false, viaProxy = false, map = null, layer = null, fitted = false, timer = null;
 
 /* ---------- 데이터 형식 ----------
  앱 Room(signal_sample)과 같은 필드명의 JSON 배열(또는 {records:[...]}).
@@ -194,7 +220,7 @@ function normalize(raw, i) {
   const nrFirst = raw.radioTechnology === "NR";
   const pick = (nr, lte) => nrFirst ? (num(nr) ?? num(lte)) : num(lte);
   const r = {
-    id: raw.id ?? ("r" + i),
+    id: raw.id ?? ("r" + i), deviceId: raw.deviceId || "",
     ts: raw.timestamp ?? raw.ts,
     lat: num(raw.latitude ?? raw.lat), lng: num(raw.longitude ?? raw.lng),
     accuracy: num(raw.accuracy), speed: num(raw.speed),
@@ -205,7 +231,7 @@ function normalize(raw, i) {
     service: raw.serviceState, alert: raw.alertLevel,
     op: raw.operatorName || "", plmn: raw.plmn || "",
     cellId: num(raw.cellId), pci: num(raw.pci), tac: num(raw.tac),
-    address: raw.address || "", memo: raw.memo || ""
+    address: raw.address || "", geocoded: !!raw.geocoded, memo: raw.memo || ""
   };
   r.rsrp = pick(raw.nrSsRsrp, raw.lteRsrp) ?? num(raw.rsrp);
   r.rsrq = pick(raw.nrSsRsrq, raw.lteRsrq);
@@ -216,166 +242,115 @@ function normalize(raw, i) {
   return r;
 }
 
-/* ---------- 샘플 (연동 파일이 없을 때) ---------- */
-const PLACES = [
-  ["설악산", 38.12, 128.46], ["지리산", 35.33, 127.73], ["한라산", 33.36, 126.53],
-  ["울릉도 해상", 37.50, 130.90], ["서해 덕적도 해상", 37.23, 126.15], ["태백산", 37.10, 128.92]
-];
-function makeSample() {
-  const out = [], now = Date.now(), ops = [["KT", "45008"], ["SKT", "45005"], ["LG U+", "45006"]];
-  for (let i = 0; i < 30; i++) {
-    // 앱은 심각 / 긴급통화만 / 단절 단계만 기록한다 (AlertLevel.shouldRecord)
-    const p = PLACES[i % 6], lv = ["CRITICAL", "EMERGENCY_ONLY", "DISCONNECTED"][i % 3];
-    const rsrp = lv === "DISCONNECTED" ? null : -(121 + (i * 7) % 20), o = ops[i % 3], nr = i % 4 === 0;
-    out.push({
-      id: i + 1, timestamp: now - Math.floor(i / 3) * 86400000 - ((i * 37) % 600) * 60000,
-      latitude: p[1] + ((i * 13) % 10) / 1000, longitude: p[2] + ((i * 17) % 10) / 1000,
-      accuracy: 8 + i % 12, speed: (i % 5) * 0.4,
-      regionType: i % 6 === 3 || i % 6 === 4 ? "SEA" : "MOUNTAIN",
-      radioTechnology: nr ? "NR" : "LTE",
-      lteRsrp: nr ? null : rsrp, lteRsrq: nr ? null : -(8 + i % 9), lteRssnr: nr ? null : (i % 15) - 5,
-      nrSsRsrp: nr ? rsrp : null, nrSsRsrq: nr ? -(9 + i % 8) : null, nrSsSinr: nr ? (i % 12) - 4 : null,
-      serviceState: lv === "DISCONNECTED" ? "OUT_OF_SERVICE" : lv === "EMERGENCY_ONLY" ? "EMERGENCY_ONLY" : "IN_SERVICE",
-      alertLevel: lv,
-      operatorName: o[0], plmn: o[1], cellId: 12345600 + i * 37, pci: 100 + i * 5, tac: 20000 + i,
-      memo: i % 5 === 0 ? "테스트 메모" : ""
-    });
+/* ---------- 연결 (GitHub 토큰 입력) ----------
+ darksignal1 저장소에 접근할 수 있는 GitHub 토큰을 한 번 입력하면, 그 토큰으로 저장소를 직접 읽고 쓴다.
+ 토큰은 이 브라우저에만 저장되고 다른 곳으로 보내지 않는다. 쓰기 권한이 있는 토큰이면 편집이 켜진다. */
+const REPO = { owner: "whkals24", repo: "darksignal1", branch: "main", path: "data" }; // 비밀이 아님
+const TOKEN_KEY = "sg_token", KAKAO_KEY = "sg_kakao";
+let TOKEN = "";
+const b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+$("loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = e.submitter || $("loginBtn"), err = $("loginErr");
+  err.textContent = ""; btn.disabled = true; btn.textContent = "확인 중...";
+  try { await enter($("token").value.trim(), $("keep").checked); $("token").value = ""; }
+  catch (ex) { err.textContent = ex.message; }
+  finally { btn.disabled = false; btn.textContent = "연결"; }
+});
+
+/** 토큰으로 저장소에 접근되는지 확인하고 화면으로 들어간다. */
+async function enter(token, keep) {
+  if (!token) throw new Error("토큰을 입력하세요");
+  TOKEN = token;
+  const r = await gh("");
+  if (!r.ok) {
+    TOKEN = "";
+    throw new Error(r.status === 401 ? "토큰이 올바르지 않거나 만료되었습니다 (401)"
+      : r.status === 404 ? "저장소 darksignal1 에 접근할 수 없습니다. 토큰 권한(저장소 선택)을 확인하세요 (404)"
+      : "접속 실패 (" + r.status + ")");
   }
-  return out;
+  const info = await r.json();
+  isAdmin = info.permissions?.push === true; // 쓰기 권한이 있는 토큰이면 편집 가능
+  viaProxy = true;
+  localStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(TOKEN_KEY);
+  (keep ? localStorage : sessionStorage).setItem(TOKEN_KEY, token);
+  $("whoText").textContent = isAdmin ? "편집 가능" : "읽기 전용";
+  document.body.classList.toggle("admin", isAdmin);
+  $("login").classList.add("hidden");
+  start();
 }
 
-/* ---------- GitHub 연동 ---------- */
-const CFG_KEY = "sg_cfg";
-/* 기본 연동 대상 (비밀이 아님). 토큰만 각자 브라우저에서 입력하면 된다. */
-const DEFAULT_CFG = { owner: "whkals24", repo: "darksignal1", branch: "main", path: "data", token: "" };
-const getCfg = () => {
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch {}
-  const c = { ...DEFAULT_CFG };
-  for (const k of Object.keys(saved)) if (saved[k]) c[k] = saved[k];
-  return c;
-};
-
-async function fetchRecords() {
-  const c = getCfg();
-  let url, headers = {}, label;
-  if (c.owner && c.repo && !/\.json$/i.test(c.path || "")) return fetchFolder(c);
-  if (c.owner && c.repo) {
-    const path = c.path.replace(/^\/+/, "");
-    url = `https://api.github.com/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}/contents/${path.split("/").map(encodeURIComponent).join("/")}`
-        + (c.branch ? `?ref=${encodeURIComponent(c.branch)}` : "");
-    headers.Accept = "application/vnd.github.raw+json";
-    if (c.token) headers.Authorization = "Bearer " + c.token;
-    label = `GitHub ${c.owner}/${c.repo}`;
-  } else {
-    url = "data/records.json?t=" + Date.now();
-    label = "data/records.json";
-  }
-  const res = await fetch(url, { headers, cache: "no-store" });
-  if (!res.ok) throw new Error("HTTP " + res.status);
-  const j = await res.json();
-  const arr = Array.isArray(j) ? j : j.records;
-  if (!Array.isArray(arr)) throw new Error("형식 오류: 배열이 아닙니다");
-  return { list: arr, label };
+function logout() {
+  localStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(TOKEN_KEY);
+  location.reload();
 }
+$("logout").addEventListener("click", logout);
+
+/* ---------- GitHub 읽기/쓰기 ---------- */
+const gh = (path, opt = {}) => fetch(`https://api.github.com/repos/${REPO.owner}/${REPO.repo}${path ? "/" + path : ""}`, {
+  ...opt, cache: "no-store",
+  headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", Authorization: "Bearer " + TOKEN, ...(opt.headers || {}) }
+});
+const cpath = p => p.split("/").map(encodeURIComponent).join("/");
 
 /* 앱이 올리는 구조: {폴더}/{기기ID}/{yyyy-MM-dd}.json 을 모두 읽어 합친다. */
-const MAX_FILES = 90;
-async function fetchFolder(c) {
-  const root = (c.path || "data").replace(/^\/+|\/+$/g, "");
-  const base = `https://api.github.com/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}`;
-  const headers = { Accept: "application/vnd.github+json" };
-  if (c.token) headers.Authorization = "Bearer " + c.token;
-  const ref = encodeURIComponent(c.branch || "main");
-  const tr = await fetch(`${base}/git/trees/${ref}?recursive=1`, { headers, cache: "no-store" });
+const MAX_FILES = 120;
+async function fetchRecords() {
+  const tr = await gh(`git/trees/${encodeURIComponent(REPO.branch)}?recursive=1`);
   if (!tr.ok) throw new Error("HTTP " + tr.status);
   const tree = await tr.json();
   // 파일명이 날짜라서 이름 역순 = 최신순. 너무 많으면 최신 것만 읽는다.
   const files = tree.tree
-    .filter(t => t.type === "blob" && t.path.startsWith(root + "/") && /\.json$/i.test(t.path))
+    .filter(t => t.type === "blob" && t.path.startsWith(REPO.path + "/") && /\.json$/i.test(t.path))
     .sort((a, b) => b.path.split("/").pop().localeCompare(a.path.split("/").pop()))
     .slice(0, MAX_FILES);
-  const rawHeaders = { ...headers, Accept: "application/vnd.github.raw+json" };
   const parts = await Promise.all(files.map(async f => {
-    const res = await fetch(`${base}/contents/${f.path.split("/").map(encodeURIComponent).join("/")}?ref=${ref}`,
-      { headers: rawHeaders, cache: "no-store" });
+    const res = await gh(`contents/${cpath(f.path)}?ref=${encodeURIComponent(REPO.branch)}`, { headers: { Accept: "application/vnd.github.raw+json" } });
     if (!res.ok) return [];
-    const j = await res.json();
-    return Array.isArray(j) ? j : (j.records || []);
+    try { const j = await res.json(); return Array.isArray(j) ? j : (j.records || []); } catch { return []; }
   }));
   const seen = new Set(), list = [];
   for (const r of parts.flat()) {
     const k = (r.deviceId || "") + "|" + r.timestamp;
     if (!seen.has(k)) { seen.add(k); list.push(r); }
   }
-  return { list, label: `GitHub ${c.owner}/${c.repo} (${files.length}개 파일)` };
+  return { list, files: files.length };
 }
 
 async function load() {
-  let list, msg;
   try {
     const r = await fetchRecords();
-    list = r.list; msg = `${r.label} · ${list.length}건 · ${new Date().toLocaleTimeString("ko-KR")}`;
+    $("srcStatus").textContent = `${r.files}개 파일 · ${r.list.length}건 · ${new Date().toLocaleTimeString("ko-KR")}`;
+    DATA = r.list.map(normalize).filter(x => x.ts != null);
+    fitted = false;
+    render(DATA);
+    renderAdmin();
   } catch (e) {
-    list = makeSample();
-    const noToken = !getCfg().token && /HTTP (401|403|404)/.test(e.message);
-    msg = noToken ? "샘플 데이터 · 'GitHub 연동'에서 토큰을 입력하세요" : `샘플 데이터 (연동 실패: ${e.message})`;
+    if (/HTTP 401/.test(e.message)) { alert("로그인이 만료되었습니다. 다시 로그인하세요."); logout(); return; }
+    $("srcStatus").textContent = "불러오기 실패: " + e.message;
   }
-  $("srcStatus").textContent = msg;
-  DATA = list.map(normalize).filter(r => r.ts != null);
-  fitted = false;
-  render(DATA);
 }
 let DATA = [];
-
-/* ---------- 로그인 / 화면 전환 ---------- */
-$("loginForm").addEventListener("submit", e => {
-  e.preventDefault();
-  $("loginErr").textContent = "";
-  if ($("uid").value.trim() === ADMIN_ID && $("pw").value === ADMIN_PW) {
-    if (typeof L === "undefined") { $("loginErr").textContent = "지도 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하세요."; return; }
-    isAdmin = true;
-    $("whoText").textContent = ADMIN_ID + " (관리자)";
-    show(true); setView("map"); initMap(); load();
-    clearInterval(timer); timer = setInterval(load, 60000);
-  } else {
-    $("loginErr").textContent = "아이디 또는 비밀번호가 올바르지 않습니다.";
-  }
-});
-$("logout").addEventListener("click", () => { $("pw").value = ""; clearInterval(timer); show(false); });
 $("refresh").addEventListener("click", load);
 
-function show(on) {
-  $("login").classList.toggle("hidden", on);
-  $("who").classList.toggle("hidden", !on);
-  $("nav").classList.toggle("hidden", !on);
-  if (!on) { $("wrap").classList.add("hidden"); $("detail").classList.add("hidden"); }
+function start() {
+  $("who").classList.remove("hidden");
+  $("nav").classList.remove("hidden");
+  if (typeof L === "undefined") { $("srcStatus").textContent = "지도 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하세요."; return; }
+  setView("map"); initMap(); load();
+  clearInterval(timer); timer = setInterval(load, 60000);
 }
 let view = "map";
 function setView(v) {
   view = v;
   $("wrap").classList.toggle("hidden", v !== "map");
   $("detail").classList.toggle("hidden", v !== "detail");
+  $("adminView").classList.toggle("hidden", v !== "admin");
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
   if (v === "map" && map) setTimeout(() => map.invalidateSize(), 0);
 }
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => setView(b.dataset.view));
-
-/* 연동 설정 창 */
-$("cfgBtn").addEventListener("click", () => {
-  const c = getCfg();
-  $("cOwner").value = c.owner || ""; $("cRepo").value = c.repo || "";
-  $("cBranch").value = c.branch || ""; $("cPath").value = c.path || ""; $("cToken").value = c.token || "";
-  $("cfg").showModal();
-});
-$("cCancel").onclick = () => $("cfg").close();
-$("cfgForm").addEventListener("submit", () => {
-  localStorage.setItem(CFG_KEY, JSON.stringify({
-    owner: $("cOwner").value.trim(), repo: $("cRepo").value.trim(), branch: $("cBranch").value.trim(),
-    path: $("cPath").value.trim(), token: $("cToken").value.trim()
-  }));
-  load();
-});
 
 /* ---------- 지도 ---------- */
 function initMap() {
@@ -394,6 +369,152 @@ const fmt = d => d.toLocaleString("ko-KR", { year: "numeric", month: "2-digit", 
 const cls = r => LEVELS[r.level][1];
 const v = (x, unit = "") => x === null || x === undefined || x === "" ? "-" : x + unit;
 
+/* ---------- 관리자: 저장소 기록 삭제/메모/주소 저장 (관리자 토큰으로 GitHub API 를 직접 호출) ---------- */
+const kstDay = ts => new Date(ts + 9 * 3600e3).toISOString().slice(0, 10); // 앱이 파일을 나누는 기준과 동일 (한국 시간)
+const DEVICE_RE = /^[A-Za-z0-9_-]{1,40}$/;
+
+async function readFile(path) {
+  const r = await gh(`contents/${cpath(path)}?ref=${encodeURIComponent(REPO.branch)}`);
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`GitHub 읽기 실패 (${r.status})`);
+  const f = await r.json();
+  return { sha: f.sha, data: JSON.parse(new TextDecoder().decode(b64d(f.content.replace(/\n/g, "")))) };
+}
+async function writeFile(path, data, sha, message) {
+  let s = ""; new TextEncoder().encode(JSON.stringify(data, null, 1)).forEach(b => s += String.fromCharCode(b));
+  const r = await gh(`contents/${cpath(path)}`, { method: "PUT", body: JSON.stringify({ message, branch: REPO.branch, sha, content: btoa(s) }) });
+  if (!r.ok) { const e = new Error(`GitHub 쓰기 실패 (${r.status})`); e.status = r.status; throw e; }
+}
+async function removeFile(path, sha, message) {
+  const r = await gh(`contents/${cpath(path)}`, { method: "DELETE", body: JSON.stringify({ message, sha, branch: REPO.branch }) });
+  if (!r.ok) { const e = new Error(`GitHub 삭제 실패 (${r.status})`); e.status = r.status; throw e; }
+}
+
+/** 앱이 같은 파일을 동시에 올리면(409/422) 다시 읽어서 한 번 더 시도한다. */
+async function retry(fn) {
+  for (let i = 0; ; i++) {
+    try { return await fn(); }
+    catch (e) { if (i >= 2 || (e.status !== 409 && e.status !== 422)) throw e; }
+  }
+}
+
+/** items 의 기록을 날짜별 파일에서 찾아 fn(기록, 항목) 결과로 바꾼다 (null 이면 삭제). */
+async function editRecords(items, fn) {
+  const files = new Map(); // path -> Map<timestamp, item>
+  for (const it of items) {
+    const ts = Number(it.timestamp);
+    if (!DEVICE_RE.test(String(it.deviceId)) || !Number.isFinite(ts)) throw new Error("deviceId/timestamp 형식 오류");
+    const path = `${REPO.path}/${it.deviceId}/${kstDay(ts)}.json`;
+    if (!files.has(path)) files.set(path, new Map());
+    files.get(path).set(ts, it);
+  }
+  let changed = 0;
+  for (const [path, targets] of files) {
+    changed += await retry(async () => {
+      const f = await readFile(path);
+      if (!f) return 0;
+      const next = []; let hit = 0;
+      for (const r of f.data) {
+        const t = targets.get(Number(r.timestamp));
+        if (!t) { next.push(r); continue; }
+        hit++;
+        const out = fn(r, t);
+        if (out !== null) next.push(out);
+      }
+      if (hit === 0) return 0;
+      if (next.length === 0) await removeFile(path, f.sha, `web edit: remove ${path}`);
+      else await writeFile(path, next, f.sha, `web edit: edit ${hit} in ${path}`);
+      return hit;
+    });
+  }
+  return { ok: true, changed };
+}
+
+async function adminCall(body) {
+  if (!isAdmin) throw new Error("쓰기 권한이 있는 토큰이 필요합니다");
+  switch (body.action) {
+    case "delete": return editRecords(body.items, () => null);
+    case "update": { // 사람이 고칠 수 있는 항목만 허용 (측정값은 원본 그대로 둔다)
+      const f = body.fields || {}, set = {};
+      if ("address" in f) { set.address = String(f.address).trim().slice(0, 200); set.geocoded = true; }
+      if ("region" in f) set.region = String(f.region).trim().slice(0, 100);
+      if ("memo" in f) set.memo = String(f.memo).trim().slice(0, 500);
+      return editRecords([{ deviceId: body.deviceId, timestamp: body.timestamp }], r => ({ ...r, ...set }));
+    }
+    case "memo": {
+      const memo = String(body.memo ?? "").slice(0, 500);
+      return editRecords([{ deviceId: body.deviceId, timestamp: body.timestamp }], r => ({ ...r, memo }));
+    }
+    case "deleteDay": {
+      let removed = 0;
+      for (const it of body.items) {
+        if (!DEVICE_RE.test(String(it.deviceId)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(it.day))) throw new Error("deviceId/day 형식 오류");
+        const path = `${REPO.path}/${it.deviceId}/${it.day}.json`;
+        removed += await retry(async () => {
+          const f = await readFile(path);
+          if (!f) return 0;
+          await removeFile(path, f.sha, `web edit: delete day ${path}`);
+          return f.data.length;
+        });
+      }
+      return { ok: true, changed: removed };
+    }
+    case "geocode": {
+      const cache = new Map(); // 약 10m 격자로 묶어 같은 장소는 한 번만 조회
+      let n = 0;
+      for (const it of body.items) {
+        const key = Number(it.lat).toFixed(4) + "," + Number(it.lng).toFixed(4);
+        if (!cache.has(key)) cache.set(key, await toAddress(Number(it.lat), Number(it.lng), n++));
+        it.address = cache.get(key);
+      }
+      // 사람이 이미 고친 주소는 덮어쓰지 않는다. 주소가 없는 곳(산·바다)도 geocoded 로 표시해 반복 조회를 막는다.
+      return editRecords(body.items, (r, t) => ({ ...r, address: r.address || t.address || "", geocoded: true }));
+    }
+    default: throw new Error("알 수 없는 action");
+  }
+}
+
+/* ---------- 좌표 → 주소 ---------- */
+async function toAddress(lat, lng, nth) {
+  const key = localStorage.getItem(KAKAO_KEY);
+  if (!key) return nominatim(lat, lng, nth);
+  const h = { Authorization: "KakaoAK " + key };
+  const r = await fetch(`https://dapi.kakao.com/v2/local/geo/coord2address.json?x=${lng}&y=${lat}`, { headers: h });
+  if (!r.ok) throw new Error(`카카오 주소 변환 실패 (${r.status}) — JavaScript 키와 사이트 도메인 등록을 확인하세요`);
+  const d = (await r.json()).documents?.[0];
+  const road = d?.road_address?.address_name, jibun = d?.address?.address_name;
+  if (road) return jibun ? `${road} (${jibun})` : road;
+  if (jibun) return jibun;
+  // 산·바다처럼 주소가 없는 곳은 행정구역(법정동)까지만이라도 남긴다
+  const rr = await fetch(`https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?x=${lng}&y=${lat}`, { headers: h });
+  if (!rr.ok) return "";
+  const region = (await rr.json()).documents?.find(x => x.region_type === "B");
+  return region ? `${region.address_name} 일대` : "";
+}
+async function nominatim(lat, lng, nth) {
+  if (nth > 0) await new Promise(res => setTimeout(res, 1100)); // 이용 정책: 초당 1회 이하
+  const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=ko&lat=${lat}&lon=${lng}`);
+  if (!r.ok) throw new Error(`주소 변환 실패 (${r.status})`);
+  return (await r.json()).display_name || "";
+}
+const recKey = r => r.deviceId + "|" + r.ts;
+const checked = new Set();
+
+async function deleteRecords(rows) {
+  rows = rows.filter(r => r.deviceId);
+  if (!rows.length) { alert("기기 ID가 없는 기록은 삭제할 수 없습니다."); return; }
+  try {
+    for (let i = 0; i < rows.length; i += 200) {
+      await adminCall({ action: "delete", items: rows.slice(i, i + 200).map(r => ({ deviceId: r.deviceId, timestamp: r.ts })) });
+    }
+    const gone = new Set(rows.map(recKey));
+    DATA = DATA.filter(r => !gone.has(recKey(r)));
+    gone.forEach(k => checked.delete(k));
+    if (selId !== null && !DATA.some(r => r.id === selId)) selId = null;
+    render(DATA);
+  } catch (e) { alert("삭제 실패: " + e.message); }
+}
+
 function popup(r) {
   const el = document.createElement("div"); el.className = "pop";
   const line = (k, val) => { const d = document.createElement("div"); d.className = "row"; d.textContent = k + ": " + val; el.appendChild(d); };
@@ -410,12 +531,18 @@ function popup(r) {
   const det = document.createElement("button"); det.textContent = "상세";
   det.onclick = () => { map.closePopup(); setView("detail"); selectRow(r.id, true); };
   a.appendChild(det);
-  if (isAdmin) {
+  if (isAdmin && viaProxy && r.deviceId) {
     const m = document.createElement("button"); m.textContent = "메모";
-    m.onclick = () => { const val = prompt("메모 입력", r.memo || ""); if (val !== null) { r.memo = val; map.closePopup(); render(DATA); } };
-    const x = document.createElement("button"); x.textContent = "숨김";
-    x.title = "이 화면에서만 숨깁니다 (저장소 데이터는 그대로)";
-    x.onclick = () => { if (confirm("이 기록을 화면에서 숨길까요? (저장소 파일은 변경되지 않습니다)")) { DATA = DATA.filter(q => q.id !== r.id); map.closePopup(); render(DATA); } };
+    m.onclick = async () => {
+      const val = prompt("메모 입력", r.memo || ""); if (val === null) return;
+      try { await adminCall({ action: "memo", deviceId: r.deviceId, timestamp: r.ts, memo: val }); r.memo = val; map.closePopup(); render(DATA); }
+      catch (e) { alert("저장 실패: " + e.message); }
+    };
+    const x = document.createElement("button"); x.textContent = "삭제";
+    x.onclick = async () => {
+      if (!confirm("이 기록을 저장소에서 삭제할까요? 되돌릴 수 없습니다.")) return;
+      map.closePopup(); await deleteRecords([r]);
+    };
     a.append(m, x);
   }
   el.appendChild(a);
@@ -494,6 +621,13 @@ const COLS = [
 let sortKey = "ts", sortDir = -1, selId = null;
 
 const thead = $("thead");
+{ // 관리자 전용: 전체 선택 체크박스
+  const th = document.createElement("th"); th.className = "adm";
+  const cb = document.createElement("input"); cb.type = "checkbox"; cb.title = "현재 목록 전체 선택"; cb.id = "chkAll";
+  cb.onclick = e => e.stopPropagation();
+  cb.onchange = () => { for (const r of filtered()) { if (!r.deviceId) continue; cb.checked ? checked.add(recKey(r)) : checked.delete(recKey(r)); } drawTable(); };
+  th.appendChild(cb); thead.appendChild(th);
+}
 for (const [key, label, , kind] of COLS) {
   const th = document.createElement("th"); th.textContent = label;
   if (kind === "n") th.className = "n";
@@ -536,6 +670,14 @@ function drawTable() {
   for (const r of rows.slice(0, MAX_ROWS)) {
     const tr = document.createElement("tr"); tr.dataset.id = r.id;
     if (r.id === selId) tr.className = "sel";
+    { // 관리자 전용: 선택 체크박스
+      const td = document.createElement("td"); td.className = "adm";
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.disabled = !r.deviceId;
+      cb.checked = checked.has(recKey(r));
+      cb.onclick = e => e.stopPropagation();
+      cb.onchange = () => { cb.checked ? checked.add(recKey(r)) : checked.delete(recKey(r)); updateDelBtn(); };
+      td.appendChild(cb); tr.appendChild(td);
+    }
     for (const [, , f, kind] of COLS) {
       const td = document.createElement("td");
       if (kind === "n") td.className = "n";
@@ -548,7 +690,20 @@ function drawTable() {
   }
   $("count").textContent = `${rows.length}건` + (rows.length > MAX_ROWS ? ` (상위 ${MAX_ROWS}건만 표시, 필터로 좁혀주세요)` : "");
   if (selId !== null) showInfo(all.find(r => r.id === selId));
+  updateDelBtn();
 }
+
+function updateDelBtn() {
+  const n = all.filter(r => checked.has(recKey(r))).length;
+  $("delSel").textContent = `선택 삭제 (${n})`;
+  $("delSel").disabled = n === 0;
+  const shown = filtered().filter(r => r.deviceId);
+  $("chkAll").checked = shown.length > 0 && shown.every(r => checked.has(recKey(r)));
+}
+$("delSel").onclick = () => {
+  const rows = all.filter(r => checked.has(recKey(r)));
+  if (rows.length && confirm(`선택한 ${rows.length}건을 저장소에서 삭제할까요? 되돌릴 수 없습니다.`)) deleteRecords(rows);
+};
 
 function selectRow(id, scroll) {
   selId = id;
@@ -566,6 +721,40 @@ async function reverseGeocode(r) {
   if (!res.ok) throw new Error("HTTP " + res.status);
   const j = await res.json(); const name = j.display_name || "";
   geoCache.set(key, name); return name;
+}
+
+/** 선택한 기록의 주소·지역·메모를 고치고 저장소에 저장하는 폼 (쓰기 권한 토큰일 때만) */
+function editForm(r) {
+  const form = document.createElement("form"); form.className = "edit";
+  const field = (label, value) => {
+    const l = document.createElement("label"), i = document.createElement("input");
+    l.textContent = label; i.value = value || ""; l.appendChild(i); form.appendChild(l); return i;
+  };
+  const addr = field("주소", r.address), region = field("지역", r.region), memo = field("메모", r.memo);
+  const row = document.createElement("div"); row.className = "row";
+  const msg = document.createElement("span"); msg.className = "status";
+  const save = document.createElement("button"); save.type = "submit"; save.textContent = "저장";
+  const find = document.createElement("button"); find.type = "button"; find.textContent = "좌표로 주소 찾기";
+  find.disabled = r.lat === null;
+  find.onclick = async () => {
+    find.disabled = true; msg.textContent = "주소 찾는 중...";
+    try { addr.value = await toAddress(r.lat, r.lng, 0) || ""; msg.textContent = addr.value ? "찾았습니다. 저장을 눌러 반영하세요." : "이 좌표의 주소가 없습니다."; }
+    catch (e) { msg.textContent = e.message; }
+    find.disabled = false;
+  };
+  const del = document.createElement("button"); del.type = "button"; del.textContent = "이 기록 삭제"; del.className = "danger";
+  del.onclick = () => { if (confirm("이 기록을 저장소에서 삭제할까요? 되돌릴 수 없습니다.")) deleteRecords([r]); };
+  form.onsubmit = async e => {
+    e.preventDefault(); save.disabled = true; msg.textContent = "저장 중...";
+    try {
+      await adminCall({ action: "update", deviceId: r.deviceId, timestamp: r.ts, fields: { address: addr.value, region: region.value, memo: memo.value } });
+      r.address = addr.value.trim(); r.region = region.value.trim(); r.memo = memo.value.trim(); r.geocoded = true;
+      msg.textContent = "저장했습니다."; render(DATA); renderAdmin();
+    } catch (ex) { msg.textContent = "저장 실패: " + ex.message; }
+    save.disabled = false;
+  };
+  row.append(save, find, del, msg); form.appendChild(row);
+  return form;
 }
 
 function showInfo(r) {
@@ -589,6 +778,7 @@ function showInfo(r) {
   add("PCI / TAC", v(r.pci) + " / " + v(r.tac));
   if (r.memo) add("메모", r.memo);
   box.appendChild(dl);
+  if (isAdmin && r.deviceId) { box.appendChild(editForm(r)); return; }
   if (!r.address && r.lat !== null) {
     const b = document.createElement("button"); b.textContent = "주소 조회 (OpenStreetMap)"; b.style.marginTop = "6px";
     b.onclick = async () => {
@@ -610,6 +800,79 @@ $("csv").onclick = () => {
   a.download = "signalguard_" + new Date().toISOString().slice(0, 10) + ".csv";
   a.click(); URL.revokeObjectURL(a.href);
 };
+
+/* ---------- 관리 화면 ---------- */
+const cell = (tr, text, cls) => { const td = document.createElement("td"); if (cls) td.className = cls; td.textContent = text; tr.appendChild(td); return td; };
+const smallBtn = (label, onclick, danger) => { const b = document.createElement("button"); b.textContent = label; if (danger) b.className = "danger"; b.onclick = onclick; return b; };
+
+function renderAdmin() {
+  if (!isAdmin) return;
+  // 기기·날짜별 집계
+  const g = new Map();
+  for (const r of DATA) {
+    if (!r.deviceId) continue;
+    const k = r.deviceId + "|" + kstDay(r.ts), o = g.get(k) || { deviceId: r.deviceId, day: kstDay(r.ts), n: 0, done: 0 };
+    o.n++; if (r.geocoded || r.address) o.done++;
+    g.set(k, o);
+  }
+  const rows = [...g.values()].sort((a, b) => b.day.localeCompare(a.day) || a.deviceId.localeCompare(b.deviceId));
+  const body = $("dBody"); body.innerHTML = "";
+  for (const o of rows) {
+    const tr = document.createElement("tr");
+    cell(tr, o.deviceId); cell(tr, o.day); cell(tr, o.n, "n"); cell(tr, `${o.done}/${o.n}`, "n");
+    const td = document.createElement("td");
+    td.appendChild(smallBtn("이 날 삭제", async () => {
+      if (!confirm(`${o.deviceId} 의 ${o.day} 기록 ${o.n}건을 모두 삭제할까요? 되돌릴 수 없습니다.`)) return;
+      try { await adminCall({ action: "deleteDay", items: [{ deviceId: o.deviceId, day: o.day }] }); $("dMsg").textContent = "삭제했습니다."; load(); }
+      catch (e) { $("dMsg").textContent = "삭제 실패: " + e.message; }
+    }, true));
+    tr.appendChild(td); body.appendChild(tr);
+  }
+  if (!rows.length) { const tr = document.createElement("tr"); cell(tr, "기록이 없습니다."); body.appendChild(tr); }
+  const miss = missingAddress();
+  $("gStat").textContent = miss.length ? `좌표는 있지만 주소가 없는 기록이 ${miss.length}건 있습니다.` : "모든 기록에 주소가 매칭되어 있습니다.";
+  $("gBtn").disabled = !miss.length;
+}
+
+/* 좌표는 있는데 아직 주소 변환을 하지 않은 기록 (산·바다처럼 주소가 없는 곳도 한 번 시도하면 geocoded 로 표시됨) */
+const missingAddress = () => DATA.filter(r => r.deviceId && r.lat !== null && r.lng !== null && !r.geocoded && !r.address);
+
+$("gBtn").onclick = async () => {
+  const list = missingAddress().sort((a, b) => a.ts - b.ts), msg = $("gMsg");
+  if (!list.length) return;
+  $("gBtn").disabled = true;
+  let done = 0;
+  try {
+    for (let i = 0; i < list.length; i += 10) {
+      const chunk = list.slice(i, i + 10);
+      msg.textContent = `주소 매칭 중... ${done}/${list.length}`;
+      await adminCall({ action: "geocode", items: chunk.map(r => ({ deviceId: r.deviceId, timestamp: r.ts, lat: r.lat, lng: r.lng })) });
+      done += chunk.length;
+    }
+    msg.textContent = `${done}건 완료`;
+  } catch (e) {
+    msg.textContent = `중단됨 (${done}/${list.length}): ${e.message}`;
+  }
+  await load();
+};
+
+/* 카카오 JavaScript 키: 이 브라우저에만 저장. 카카오 앱 설정에서 이 사이트 도메인만 허용해 두면 노출돼도 다른 곳에서 못 쓴다. */
+$("kakaoKey").value = localStorage.getItem(KAKAO_KEY) || "";
+$("kakaoSave").onclick = () => {
+  const k = $("kakaoKey").value.trim();
+  k ? localStorage.setItem(KAKAO_KEY, k) : localStorage.removeItem(KAKAO_KEY);
+  $("kakaoMsg").textContent = k ? "저장했습니다." : "삭제했습니다. (키가 없으면 OpenStreetMap으로 변환합니다)";
+};
+
+async function boot() {
+  const saved = localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
+  if (saved) {
+    try { await enter(saved, !!localStorage.getItem(TOKEN_KEY)); return; }
+    catch (e) { $("loginErr").textContent = e.message; }
+  }
+  $("login").classList.remove("hidden");
+}
+boot();
 </script>
 </body>
 </html>
