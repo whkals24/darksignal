@@ -148,11 +148,11 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
 <dialog id="cfg">
   <form method="dialog" id="cfgForm">
     <h2>GitHub 연동</h2>
-    <p>앱이 올린 기록 파일(JSON)을 읽어옵니다. 비워두면 이 페이지와 같은 저장소의 <code>data/records.json</code>을 읽습니다 (GitHub Pages).</p>
+    <p>앱이 올린 <code>data/기기ID/날짜.json</code> 파일들을 모두 읽어 합칩니다 (경로 칸에 <code>.json</code> 파일을 적으면 그 파일만 읽음). 소유자·저장소를 비워두면 이 페이지와 같은 저장소의 <code>data/records.json</code>을 읽습니다 (GitHub Pages).</p>
     <label>소유자 (owner)<input id="cOwner" placeholder="예: myname"></label>
     <label>저장소 (repo)<input id="cRepo" placeholder="예: signalguard-data"></label>
     <label>브랜치<input id="cBranch" placeholder="main"></label>
-    <label>파일 경로<input id="cPath" placeholder="data/records.json"></label>
+    <label>파일 경로<input id="cPath" placeholder="data (폴더) 또는 파일.json"></label>
     <label>토큰 (비공개 저장소만, 읽기 전용 권장)<input id="cToken" type="password" autocomplete="off"></label>
     <p>토큰은 이 브라우저(localStorage)에만 저장됩니다.</p>
     <div class="btns">
@@ -224,7 +224,9 @@ const PLACES = [
 function makeSample() {
   const out = [], now = Date.now(), ops = [["KT", "45008"], ["SKT", "45005"], ["LG U+", "45006"]];
   for (let i = 0; i < 30; i++) {
-    const p = PLACES[i % 6], rsrp = -(105 + (i * 7) % 30), o = ops[i % 3], nr = i % 4 === 0;
+    // 앱은 심각 / 긴급통화만 / 단절 단계만 기록한다 (AlertLevel.shouldRecord)
+    const p = PLACES[i % 6], lv = ["CRITICAL", "EMERGENCY_ONLY", "DISCONNECTED"][i % 3];
+    const rsrp = lv === "DISCONNECTED" ? null : -(121 + (i * 7) % 20), o = ops[i % 3], nr = i % 4 === 0;
     out.push({
       id: i + 1, timestamp: now - Math.floor(i / 3) * 86400000 - ((i * 37) % 600) * 60000,
       latitude: p[1] + ((i * 13) % 10) / 1000, longitude: p[2] + ((i * 17) % 10) / 1000,
@@ -233,8 +235,8 @@ function makeSample() {
       radioTechnology: nr ? "NR" : "LTE",
       lteRsrp: nr ? null : rsrp, lteRsrq: nr ? null : -(8 + i % 9), lteRssnr: nr ? null : (i % 15) - 5,
       nrSsRsrp: nr ? rsrp : null, nrSsRsrq: nr ? -(9 + i % 8) : null, nrSsSinr: nr ? (i % 12) - 4 : null,
-      serviceState: rsrp <= -128 ? "OUT_OF_SERVICE" : "IN_SERVICE",
-      alertLevel: rsrp <= -128 ? "DISCONNECTED" : rsrp <= -120 ? "CRITICAL" : rsrp <= -110 ? "CAUTION" : "NORMAL",
+      serviceState: lv === "DISCONNECTED" ? "OUT_OF_SERVICE" : lv === "EMERGENCY_ONLY" ? "EMERGENCY_ONLY" : "IN_SERVICE",
+      alertLevel: lv,
       operatorName: o[0], plmn: o[1], cellId: 12345600 + i * 37, pci: 100 + i * 5, tac: 20000 + i,
       memo: i % 5 === 0 ? "테스트 메모" : ""
     });
@@ -244,13 +246,22 @@ function makeSample() {
 
 /* ---------- GitHub 연동 ---------- */
 const CFG_KEY = "sg_cfg";
-const getCfg = () => { try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch { return {}; } };
+/* 기본 연동 대상 (비밀이 아님). 토큰만 각자 브라우저에서 입력하면 된다. */
+const DEFAULT_CFG = { owner: "whkals24", repo: "darksignal-data", branch: "main", path: "data", token: "" };
+const getCfg = () => {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch {}
+  const c = { ...DEFAULT_CFG };
+  for (const k of Object.keys(saved)) if (saved[k]) c[k] = saved[k];
+  return c;
+};
 
 async function fetchRecords() {
   const c = getCfg();
   let url, headers = {}, label;
+  if (c.owner && c.repo && !/\.json$/i.test(c.path || "")) return fetchFolder(c);
   if (c.owner && c.repo) {
-    const path = (c.path || "data/records.json").replace(/^\/+/, "");
+    const path = c.path.replace(/^\/+/, "");
     url = `https://api.github.com/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}/contents/${path.split("/").map(encodeURIComponent).join("/")}`
         + (c.branch ? `?ref=${encodeURIComponent(c.branch)}` : "");
     headers.Accept = "application/vnd.github.raw+json";
@@ -268,13 +279,47 @@ async function fetchRecords() {
   return { list: arr, label };
 }
 
+/* 앱이 올리는 구조: {폴더}/{기기ID}/{yyyy-MM-dd}.json 을 모두 읽어 합친다. */
+const MAX_FILES = 90;
+async function fetchFolder(c) {
+  const root = (c.path || "data").replace(/^\/+|\/+$/g, "");
+  const base = `https://api.github.com/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}`;
+  const headers = { Accept: "application/vnd.github+json" };
+  if (c.token) headers.Authorization = "Bearer " + c.token;
+  const ref = encodeURIComponent(c.branch || "main");
+  const tr = await fetch(`${base}/git/trees/${ref}?recursive=1`, { headers, cache: "no-store" });
+  if (!tr.ok) throw new Error("HTTP " + tr.status);
+  const tree = await tr.json();
+  // 파일명이 날짜라서 이름 역순 = 최신순. 너무 많으면 최신 것만 읽는다.
+  const files = tree.tree
+    .filter(t => t.type === "blob" && t.path.startsWith(root + "/") && /\.json$/i.test(t.path))
+    .sort((a, b) => b.path.split("/").pop().localeCompare(a.path.split("/").pop()))
+    .slice(0, MAX_FILES);
+  const rawHeaders = { ...headers, Accept: "application/vnd.github.raw+json" };
+  const parts = await Promise.all(files.map(async f => {
+    const res = await fetch(`${base}/contents/${f.path.split("/").map(encodeURIComponent).join("/")}?ref=${ref}`,
+      { headers: rawHeaders, cache: "no-store" });
+    if (!res.ok) return [];
+    const j = await res.json();
+    return Array.isArray(j) ? j : (j.records || []);
+  }));
+  const seen = new Set(), list = [];
+  for (const r of parts.flat()) {
+    const k = (r.deviceId || "") + "|" + r.timestamp;
+    if (!seen.has(k)) { seen.add(k); list.push(r); }
+  }
+  return { list, label: `GitHub ${c.owner}/${c.repo} (${files.length}개 파일)` };
+}
+
 async function load() {
   let list, msg;
   try {
     const r = await fetchRecords();
     list = r.list; msg = `${r.label} · ${list.length}건 · ${new Date().toLocaleTimeString("ko-KR")}`;
   } catch (e) {
-    list = makeSample(); msg = `샘플 데이터 (연동 실패: ${e.message})`;
+    list = makeSample();
+    const noToken = !getCfg().token && /HTTP (401|403|404)/.test(e.message);
+    msg = noToken ? "샘플 데이터 · 'GitHub 연동'에서 토큰을 입력하세요" : `샘플 데이터 (연동 실패: ${e.message})`;
   }
   $("srcStatus").textContent = msg;
   DATA = list.map(normalize).filter(r => r.ts != null);
