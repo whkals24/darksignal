@@ -188,6 +188,14 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
 <!-- 메뉴: 관리 (관리자 전용) -->
 <div id="adminView" class="hidden">
   <section class="card">
+    <h2>같은 장소 합치기</h2>
+    <p class="status">연달아 쌓인 30m 안의 기록을 한 줄로 합칩니다. 가장 나쁜 값이 본 기록이 되고, 가장 좋은 값과 건수가 함께 남습니다. 다른 곳에 갔다 돌아온 기록은 합치지 않습니다.</p>
+    <p class="status" id="mStat"></p>
+    <button id="mBtn">저장소 파일 합치기</button>
+    <div class="status" id="mMsg"></div>
+  </section>
+
+  <section class="card">
     <h2>주소 매칭</h2>
     <p class="status" id="gStat"></p>
     <div class="row">
@@ -248,8 +256,12 @@ function normalize(raw, i) {
     service: raw.serviceState, alert: raw.alertLevel,
     op: raw.operatorName || "", plmn: raw.plmn || "",
     cellId: num(raw.cellId), pci: num(raw.pci), tac: num(raw.tac),
-    address: raw.address || "", geocoded: !!raw.geocoded, memo: raw.memo || ""
+    address: raw.address || "", geocoded: !!raw.geocoded, memo: raw.memo || "",
+    // 앱이 같은 장소(30m)에 연달아 쌓인 기록을 합칠 때 남기는 값: 본 기록 = 가장 나쁜 값, best = 가장 좋은 값
+    count: num(raw.count) ?? 1, firstTs: num(raw.firstTs) ?? (raw.timestamp ?? raw.ts), lastTs: num(raw.lastTs) ?? (raw.timestamp ?? raw.ts),
+    best: raw.best && typeof raw.best === "object" ? raw.best : null
   };
+  r.bestRsrp = r.best ? num(r.best.rsrp) : null;
   r.rsrp = pick(raw.nrSsRsrp, raw.lteRsrp) ?? num(raw.rsrp);
   r.rsrq = pick(raw.nrSsRsrq, raw.lteRsrq);
   r.sinr = pick(raw.nrSsSinr, raw.lteRssnr);
@@ -507,20 +519,37 @@ async function adminCall(body) {
 }
 
 /* ---------- 좌표 → 주소 ---------- */
+/* 카카오 지도 SDK(services 라이브러리)를 필요할 때 한 번만 불러온다. 브라우저에서는 JavaScript 키 + 등록된 사이트 도메인으로 동작한다. */
+let kakaoReady = null;
+function loadKakao(key) {
+  if (kakaoReady) return kakaoReady;
+  return kakaoReady = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(key)}&libraries=services&autoload=false`;
+    s.onload = () => window.kakao?.maps ? window.kakao.maps.load(resolve) : reject(new Error("카카오 SDK 초기화 실패"));
+    s.onerror = () => { kakaoReady = null; reject(new Error("카카오 SDK를 불러오지 못했습니다 — JavaScript 키, 사이트 도메인 등록, 카카오맵 사용 설정을 확인하세요")); };
+    document.head.appendChild(s);
+  });
+}
+const kakaoCall = (fn) => new Promise((resolve, reject) =>
+  fn((result, status) => {
+    if (status === kakao.maps.services.Status.OK) resolve(result);
+    else if (status === kakao.maps.services.Status.ZERO_RESULT) resolve([]);
+    else reject(new Error("카카오 주소 변환 오류 (" + status + ")"));
+  }));
+
 async function toAddress(lat, lng, nth) {
   const key = localStorage.getItem(KAKAO_KEY);
   if (!key) return nominatim(lat, lng, nth);
-  const h = { Authorization: "KakaoAK " + key };
-  const r = await fetch(`https://dapi.kakao.com/v2/local/geo/coord2address.json?x=${lng}&y=${lat}`, { headers: h });
-  if (!r.ok) throw new Error(`카카오 주소 변환 실패 (${r.status}) — JavaScript 키와 사이트 도메인 등록을 확인하세요`);
-  const d = (await r.json()).documents?.[0];
-  const road = d?.road_address?.address_name, jibun = d?.address?.address_name;
+  await loadKakao(key);
+  const geo = new kakao.maps.services.Geocoder();
+  const res = await kakaoCall(cb => geo.coord2Address(lng, lat, cb));
+  const road = res[0]?.road_address?.address_name, jibun = res[0]?.address?.address_name;
   if (road) return jibun ? `${road} (${jibun})` : road;
   if (jibun) return jibun;
   // 산·바다처럼 주소가 없는 곳은 행정구역(법정동)까지만이라도 남긴다
-  const rr = await fetch(`https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?x=${lng}&y=${lat}`, { headers: h });
-  if (!rr.ok) return "";
-  const region = (await rr.json()).documents?.find(x => x.region_type === "B");
+  const regions = await kakaoCall(cb => geo.coord2RegionCode(lng, lat, cb));
+  const region = regions.find(x => x.region_type === "B");
   return region ? `${region.address_name} 일대` : "";
 }
 async function nominatim(lat, lng, nth) {
@@ -554,6 +583,7 @@ function popup(r) {
   line("시각", fmt(toDate(r.ts)));
   line("단계", LEVELS[r.level][0]);
   line("RSRQ / SINR", v(r.rsrq) + " / " + v(r.sinr));
+  if (r.count > 1) line("이 장소", `${r.count}건 · 최저 ${v(r.rsrp)} / 최고 ${v(r.bestRsrp)} dBm`);
   if (r.op) line("통신사", r.op + " " + (RAT[r.rat] || ""));
   if (r.region) line("지역", r.region);
   if (r.address) line("주소", r.address);
@@ -673,7 +703,9 @@ const COLS = [
   ["address", "주소/지역", r => r.address || r.region || "-"],
   ["lat", "위도", r => r.lat === null ? "-" : r.lat.toFixed(5), "n"],
   ["lng", "경도", r => r.lng === null ? "-" : r.lng.toFixed(5), "n"],
-  ["rsrp", "RSRP", r => v(r.rsrp), "n"],
+  ["rsrp", "RSRP(최저)", r => v(r.rsrp), "n"],
+  ["bestRsrp", "RSRP(최고)", r => r.count > 1 ? v(r.bestRsrp) : "-", "n"],
+  ["count", "건수", r => r.count, "n"],
   ["rsrq", "RSRQ", r => v(r.rsrq), "n"],
   ["sinr", "SINR", r => v(r.sinr), "n"],
   ["rat", "망", r => RAT[r.rat] || "-"],
@@ -835,6 +867,11 @@ function showInfo(r) {
   add("정확도 / 속도", v(r.accuracy, " m") + " / " + (r.speed === null ? "-" : (r.speed * 3.6).toFixed(1) + " km/h"));
   add("지역 구분", REGIONS[r.regionType] || r.region || "-");
   add("단계", LEVELS[r.level][0]);
+  if (r.count > 1) {
+    const t = ts => toDate(ts).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+    add("같은 장소 머문 기록", `${r.count}건 (${t(r.firstTs)} ~ ${t(r.lastTs)})`);
+    add("최저 → 최고", `RSRP ${v(r.rsrp)} → ${v(r.bestRsrp)} dBm` + (r.best ? ` · 최고일 때 ${(LEVELS[r.best.alertLevel] || LEVELS.UNKNOWN)[0]}` : ""));
+  }
   add("서비스 상태", SERVICE[r.service] || "-");
   add("통신사 / PLMN", v(r.op) + " / " + v(r.plmn));
   add("접속 망", RAT[r.rat] || "-");
@@ -898,6 +935,9 @@ function renderAdmin() {
   const miss = missingAddress();
   $("gStat").textContent = miss.length ? `좌표는 있지만 주소가 없는 기록이 ${miss.length}건 있습니다.` : "모든 기록에 주소가 매칭되어 있습니다.";
   $("gBtn").disabled = !miss.length;
+  const mg = mergeable();
+  $("mStat").textContent = mg.n ? `합칠 수 있는 기록이 ${mg.n}건 있습니다 (${mg.files}개 파일).` : "합칠 기록이 없습니다.";
+  $("mBtn").disabled = !mg.n;
 }
 
 /* 좌표는 있는데 아직 주소 변환을 하지 않은 기록 (산·바다처럼 주소가 없는 곳도 한 번 시도하면 geocoded 로 표시됨) */
@@ -927,7 +967,74 @@ $("kakaoKey").value = localStorage.getItem(KAKAO_KEY) || "";
 $("kakaoSave").onclick = () => {
   const k = $("kakaoKey").value.trim();
   k ? localStorage.setItem(KAKAO_KEY, k) : localStorage.removeItem(KAKAO_KEY);
+  kakaoReady = null; // 키가 바뀌면 SDK 를 새 키로 다시 불러온다 (이미 불러온 SDK 는 페이지를 새로고침해야 교체됨)
   $("kakaoMsg").textContent = k ? "저장했습니다." : "삭제했습니다. (키가 없으면 OpenStreetMap으로 변환합니다)";
+};
+
+/* ---------- 같은 장소 합치기 (앱의 GitHubUploader.collapseSamePlace 와 같은 규칙) ---------- */
+const SAME_PLACE_M = 30;
+const RUN_SEV = ["UNKNOWN", "NORMAL", "CAUTION", "DANGER", "CRITICAL", "EMERGENCY_ONLY", "DISCONNECTED"];
+const runSev = o => Math.max(0, RUN_SEV.indexOf(o.alertLevel));
+const runVal = (o, nr, lte) => { const v = k => o[k] == null ? null : o[k]; return o.radioTechnology === "NR" ? (v(nr) ?? v(lte)) : v(lte); };
+const isWorse = (sa, ra, sb, rb) => sa !== sb ? sa > sb : ra == null ? false : rb == null ? true : ra < rb;
+const worseRec = (a, b) => isWorse(runSev(a), runVal(a, "nrSsRsrp", "lteRsrp"), runSev(b), runVal(b, "nrSsRsrp", "lteRsrp"));
+const worseBest = (a, b) => isWorse(runSev(a), a.rsrp ?? null, runSev(b), b.rsrp ?? null);
+const hasPos = o => typeof o.latitude === "number" && typeof o.longitude === "number";
+function meters(la1, lo1, la2, lo2) {
+  const d = x => x * Math.PI / 180, a = Math.sin(d(la2 - la1) / 2) ** 2 + Math.cos(d(la1)) * Math.cos(d(la2)) * Math.sin(d(lo2 - lo1) / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(a));
+}
+function asRun(o) {
+  if (o.count && o.best) return o;
+  const ts = o.timestamp;
+  return { ...o, count: 1, firstTs: ts, lastTs: ts, best: {
+    timestamp: ts, alertLevel: o.alertLevel, radioTechnology: o.radioTechnology,
+    rsrp: runVal(o, "nrSsRsrp", "lteRsrp"), rsrq: runVal(o, "nrSsRsrq", "lteRsrq"), sinr: runVal(o, "nrSsSinr", "lteRssnr") } };
+}
+function mergeRuns(a, b) {
+  const w = worseRec(b, a) ? b : a;
+  return { ...w, count: a.count + b.count, firstTs: Math.min(a.firstTs, b.firstTs), lastTs: Math.max(a.lastTs, b.lastTs),
+    best: worseBest(a.best, b.best) ? b.best : a.best };
+}
+function collapseRuns(records) {
+  const runs = records.map(asRun).sort((a, b) => a.firstTs - b.firstTs);
+  const out = []; let anchor = null;
+  for (const s of runs) {
+    if (anchor && hasPos(anchor) && hasPos(s) && meters(anchor.latitude, anchor.longitude, s.latitude, s.longitude) <= SAME_PLACE_M)
+      out[out.length - 1] = mergeRuns(out[out.length - 1], s);
+    else { out.push(s); anchor = s; }
+  }
+  return out;
+}
+/** 합치면 줄어드는 기록 수 (불러와 둔 파일 기준) */
+function mergeable() {
+  let n = 0, files = 0;
+  for (const [, f] of fileCache) { const d = f.recs.length - collapseRuns(f.recs).length; if (d > 0) { n += d; files++; } }
+  return { n, files };
+}
+$("mBtn").onclick = async () => {
+  if (!isAdmin) return;
+  const msg = $("mMsg"), { n, files } = mergeable();
+  if (!n) return;
+  if (!confirm(`${files}개 파일에서 ${n}건이 합쳐져 줄어듭니다. 합쳐진 기록은 되돌릴 수 없습니다. 진행할까요?`)) return;
+  $("mBtn").disabled = true;
+  let removed = 0, done = 0;
+  try {
+    for (const [path, f] of [...fileCache]) {
+      if (f.recs.length - collapseRuns(f.recs).length <= 0) continue;
+      msg.textContent = `합치는 중... ${++done}/${files}`;
+      removed += await retry(async () => { // 앱이 동시에 올리면(409/422) 다시 읽어서 한 번 더 시도
+        const cur = await readFile(path);
+        if (!cur) return 0;
+        const out = collapseRuns(cur.data);
+        if (out.length >= cur.data.length) return 0;
+        await writeFile(path, out, cur.sha, `web merge same place ${path}`);
+        return cur.data.length - out.length;
+      });
+    }
+    msg.textContent = `완료: ${removed}건이 합쳐졌습니다.`;
+  } catch (e) { msg.textContent = `중단됨: ${e.message}`; }
+  await load(true);
 };
 
 async function boot() {
