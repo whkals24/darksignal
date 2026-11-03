@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SignalGuard 음영 현황</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--bg:#eef1ef;--panel:#fff;--ink:#18262e;--sub:#5d6d75;--line:#d5dcd9;
+  --ok:#2f7d5b;--warn:#c98a12;--bad:#b83a2e;--brand:#1d4d63}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#10191e;--panel:#182329;--ink:#e6edef;--sub:#93a4ab;--line:#2a3a42;
+        --ok:#52b588;--warn:#e0a93a;--bad:#e2685b;--brand:#6fb1cc}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);display:flex;flex-direction:column;
+  font:15px/1.5 "Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:12px 16px;background:var(--brand);color:#fff;flex:none}
+header h1{margin:0;font-size:17px}
+.who{font-size:13px;display:flex;gap:10px;align-items:center}
+button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);
+  background:var(--panel);color:var(--ink);padding:5px 10px}
+button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+header button{background:transparent;color:#fff;border-color:rgba(255,255,255,.5)}
+.hidden{display:none!important}
+#login{max-width:340px;width:calc(100% - 32px);margin:12vh auto;padding:24px;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px}
+#login h2{margin:0 0 4px;font-size:20px}
+#login p{margin:0 0 16px;color:var(--sub);font-size:13px}
+label{display:block;font-size:13px;color:var(--sub);margin-top:12px}
+input{width:100%;margin-top:4px;padding:9px 10px;font:inherit;color:var(--ink);
+  background:var(--bg);border:1px solid var(--line);border-radius:6px}
+#login button{width:100%;margin-top:18px;background:var(--brand);color:#fff;border:0;padding:10px}
+.err{color:var(--bad);font-size:13px;margin-top:10px;min-height:1.2em}
+.wrap{flex:1;min-height:0;display:flex}
+#map{flex:1;min-width:0}
+#side{width:290px;flex:none;overflow:auto;background:var(--panel);border-left:1px solid var(--line);padding:14px}
+.sum{display:flex;gap:10px;margin-bottom:12px}
+.sum div{flex:1;background:var(--bg);border-radius:8px;padding:8px 10px}
+.sum b{display:block;font-size:22px}.sum span{font-size:12px;color:var(--sub)}
+#side h2{font-size:14px;margin:0 0 8px}
+#days{list-style:none;margin:8px 0 0;padding:0}
+#days button{display:block;width:100%;text-align:left;margin-bottom:6px;padding:7px 10px;position:relative;overflow:hidden}
+#days button.on{border-color:var(--brand);box-shadow:inset 3px 0 0 var(--brand)}
+#days .bar{position:absolute;left:0;bottom:0;height:3px;background:var(--bad);opacity:.6}
+#days .d{font-weight:600}#days .m{float:right;color:var(--sub);font-size:13px}
+@media (max-width:700px){
+  .wrap{flex-direction:column}
+  #side{width:100%;max-height:42%;border-left:0;border-top:1px solid var(--line)}
+}
+.pop{min-width:150px;line-height:1.6}
+.pop b{font-size:15px}
+.pop .row{color:#333}
+.pop .acts{margin-top:6px}
+.pop button{color:#111;background:#fff;border-color:#bbb;margin-right:4px;font-size:13px;padding:2px 8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>SignalGuard 음영 현황</h1>
+  <div class="who hidden" id="who"><span id="whoText"></span><button id="logout">로그아웃</button></div>
+</header>
+
+<section id="login">
+  <h2>로그인</h2>
+  <p>테스트 버전 · 샘플 데이터가 표시됩니다.</p>
+  <form id="loginForm">
+    <label>아이디<input id="uid" autocomplete="username" required></label>
+    <label>비밀번호<input id="pw" type="password" autocomplete="current-password" required></label>
+    <button type="submit">로그인</button>
+    <div class="err" id="loginErr"></div>
+  </form>
+</section>
+
+<div class="wrap hidden" id="wrap">
+  <div id="map"></div>
+  <aside id="side">
+    <div class="sum"><div><b id="sTotal">0</b><span id="sTotalL">전체 기록</span></div><div><b id="sMin">-</b><span>최저 RSRP</span></div></div>
+    <h2>날짜별 현황</h2>
+    <button id="allDays">전체 보기</button>
+    <ul id="days"></ul>
+  </aside>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+/* ===== 테스트용 관리자 계정 (페이지 소스에 그대로 보이므로 테스트에만 사용) ===== */
+const ADMIN_ID = "northkca";
+const ADMIN_PW = "qnrtjdnf1!";
+/* ================================================================== */
+
+const $ = id => document.getElementById(id);
+let isAdmin = false, map = null, layer = null, fitted = false;
+
+/* 테스트용 샘플 데이터 (실제 앱 연동 전까지 사용) */
+const PLACES = [
+  ["설악산", 38.12, 128.46], ["지리산", 35.33, 127.73], ["한라산", 33.36, 126.53],
+  ["울릉도 해상", 37.50, 130.90], ["서해 덕적도 해상", 37.23, 126.15], ["태백산", 37.10, 128.92]
+];
+function makeSample() {
+  const out = [], now = Date.now();
+  for (let i = 0; i < 30; i++) {
+    const p = PLACES[i % 6], rsrp = -(105 + (i * 7) % 30);
+    out.push({
+      id: "s" + i,
+      ts: now - Math.floor(i / 3) * 86400000 - ((i * 37) % 600) * 60000,
+      rsrp, level: rsrp <= -120 ? "위험" : rsrp <= -110 ? "주의" : "양호",
+      region: p[0], lat: p[1] + ((i * 13) % 10) / 1000, lng: p[2] + ((i * 17) % 10) / 1000,
+      memo: i % 5 === 0 ? "테스트 메모" : ""
+    });
+  }
+  return out;
+}
+let DATA = makeSample();
+
+$("loginForm").addEventListener("submit", e => {
+  e.preventDefault();
+  $("loginErr").textContent = "";
+  if ($("uid").value.trim() === ADMIN_ID && $("pw").value === ADMIN_PW) {
+    isAdmin = true;
+    $("whoText").textContent = ADMIN_ID + " (관리자)";
+    show(true); initMap(); fitted = false; render(DATA);
+  } else {
+    $("loginErr").textContent = "아이디 또는 비밀번호가 올바르지 않습니다.";
+  }
+});
+$("logout").addEventListener("click", () => { $("pw").value = ""; show(false); });
+
+function show(on) {
+  $("login").classList.toggle("hidden", on);
+  $("wrap").classList.toggle("hidden", !on);
+  $("who").classList.toggle("hidden", !on);
+}
+
+function initMap() {
+  if (!map) {
+    map = L.map("map").setView([36.5, 127.8], 7);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      { maxZoom: 18, attribution: "© OpenStreetMap" }).addTo(map);
+    layer = L.layerGroup().addTo(map);
+  }
+  setTimeout(() => map.invalidateSize(), 0);
+}
+
+const toDate = t => t && t.toDate ? t.toDate() : new Date(t);
+const fmt = d => d.toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+const cls = r => r.rsrp <= -120 ? "bad" : r.rsrp <= -110 ? "warn" : "ok";
+
+function popup(r) {
+  const el = document.createElement("div"); el.className = "pop";
+  const line = (k, v) => { const d = document.createElement("div"); d.className = "row"; d.textContent = k + ": " + v; el.appendChild(d); };
+  const t = document.createElement("b"); t.textContent = "RSRP " + (r.rsrp ?? "-") + " dBm"; el.appendChild(t);
+  line("시각", fmt(toDate(r.ts)));
+  if (r.level) line("단계", r.level);
+  if (r.region) line("지역", r.region);
+  line("좌표", r.lat.toFixed(5) + ", " + r.lng.toFixed(5));
+  if (r.memo) line("메모", r.memo);
+  if (isAdmin) {
+    const a = document.createElement("div"); a.className = "acts";
+    const m = document.createElement("button"); m.textContent = "메모";
+    m.onclick = async () => { const v = prompt("메모 입력", r.memo || ""); if (v !== null) { r.memo = v; map.closePopup(); render(DATA); } };
+    const x = document.createElement("button"); x.textContent = "삭제";
+    x.onclick = async () => { if (confirm("이 기록을 삭제할까요?")) { DATA = DATA.filter(x => x.id !== r.id); map.closePopup(); render(DATA); } };
+    a.append(m, x); el.appendChild(a);
+  }
+  return el;
+}
+
+let all = [], selDay = null;
+const dayKey = r => { const d = toDate(r.ts);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+
+function render(list) {
+  all = list;
+  if (selDay && !list.some(r => dayKey(r) === selDay)) selDay = null;
+  draw();
+}
+
+function draw() {
+  // 날짜별 집계
+  const g = {};
+  for (const r of all) {
+    const k = dayKey(r); const o = g[k] || (g[k] = { n: 0, min: null });
+    o.n++; if (typeof r.rsrp === "number" && (o.min === null || r.rsrp < o.min)) o.min = r.rsrp;
+  }
+  const keys = Object.keys(g).sort().reverse(), max = Math.max(1, ...keys.map(k => g[k].n));
+  const ul = $("days"); ul.innerHTML = "";
+  for (const k of keys) {
+    const li = document.createElement("li"), b = document.createElement("button");
+    if (k === selDay) b.className = "on";
+    const d = document.createElement("span"); d.className = "d"; d.textContent = k.slice(5).replace("-", "/") + "  " + g[k].n + "건";
+    const m = document.createElement("span"); m.className = "m"; m.textContent = g[k].min ?? "-";
+    const bar = document.createElement("i"); bar.className = "bar"; bar.style.width = (g[k].n / max * 100) + "%";
+    b.append(d, m, bar);
+    b.onclick = () => { selDay = (selDay === k ? null : k); fitted = false; draw(); };
+    li.appendChild(b); ul.appendChild(li);
+  }
+  if (!keys.length) { const li = document.createElement("li"); li.textContent = "기록이 없습니다."; ul.appendChild(li); }
+
+  // 지도 + 요약 (선택한 날짜만)
+  const shown = selDay ? all.filter(r => dayKey(r) === selDay) : all;
+  $("sTotal").textContent = shown.length;
+  $("sTotalL").textContent = selDay ? selDay.slice(5).replace("-", "/") + " 기록" : "전체 기록";
+  const mins = shown.map(r => r.rsrp).filter(v => typeof v === "number");
+  $("sMin").textContent = mins.length ? Math.min(...mins) : "-";
+
+  layer.clearLayers();
+  const pts = [], css = getComputedStyle(document.documentElement);
+  for (const r of shown) {
+    if (typeof r.lat !== "number" || typeof r.lng !== "number") continue;
+    const c = css.getPropertyValue("--" + cls(r)).trim();
+    L.circleMarker([r.lat, r.lng], { radius: 9, color: "#fff", weight: 2, fillColor: c, fillOpacity: .9 })
+      .bindPopup(() => popup(r)).addTo(layer);
+    pts.push([r.lat, r.lng]);
+  }
+  if (pts.length && !fitted) { map.fitBounds(pts, { padding: [40, 40], maxZoom: 13 }); fitted = true; }
+}
+$("allDays").addEventListener("click", () => { selDay = null; fitted = false; draw(); });
+</script>
+</body>
+</html>
