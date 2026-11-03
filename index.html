@@ -129,7 +129,7 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
 </head>
 <body>
 <header>
-  <h1>SignalGuard 음영 현황</h1>
+  <h1>SignalGuard 음영 현황 <small id="ver" style="font-weight:400;font-size:11px;opacity:.7"></small></h1>
   <nav class="hidden" id="nav">
     <button data-view="map" class="on">지도 현황</button>
     <button data-view="detail">상세 데이터</button>
@@ -221,7 +221,9 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
 const $ = id => document.getElementById(id);
-let isAdmin = false, viaProxy = false, map = null, layer = null, fitted = false, timer = null;
+const BUILD = "v6 · 카카오맵"; // 화면 제목 옆에 표시 — 어느 버전이 열려 있는지 확인용
+$("ver").textContent = BUILD;
+let isAdmin = false, viaProxy = false, M = null, mapNote = "", fitted = false, timer = null;
 
 /* ---------- 데이터 형식 ----------
  앱 Room(signal_sample)과 같은 필드명의 JSON 배열(또는 {records:[...]}).
@@ -362,7 +364,7 @@ async function load(manual = false) {
   try {
     const r = await fetchRecords();
     const stamp = `${r.files}개 파일 · ${r.list.length}건 · ${new Date().toLocaleTimeString("ko-KR")}`;
-    $("srcStatus").textContent = stamp;
+    $("srcStatus").textContent = stamp + mapNote;
     if (!manual && r.signature === lastSignature) return; // 바뀐 것이 없으면 화면은 그대로 둔다 (지도 위치·선택 유지)
     const first = lastSignature === "";
     lastSignature = r.signature;
@@ -378,11 +380,12 @@ async function load(manual = false) {
 let DATA = [];
 $("refresh").addEventListener("click", () => load(true));
 
-function start() {
+async function start() {
   $("who").classList.remove("hidden");
   $("nav").classList.remove("hidden");
-  if (typeof L === "undefined") { $("srcStatus").textContent = "지도 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하세요."; return; }
-  setView("map"); initMap(); load(true);
+  setView("map");
+  await initMap();
+  load(true);
   clearInterval(timer); timer = setInterval(() => load(false), 60000);
 }
 let view = "map";
@@ -392,20 +395,111 @@ function setView(v) {
   $("detail").classList.toggle("hidden", v !== "detail");
   $("adminView").classList.toggle("hidden", v !== "admin");
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
-  if (v === "map" && map) setTimeout(() => map.invalidateSize(), 0);
+  if (v === "map") setTimeout(() => M && M.resize(), 0);
 }
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => setView(b.dataset.view));
 
-/* ---------- 지도 ---------- */
-function initMap() {
-  if (!map) {
-    map = L.map("map").setView([36.5, 127.8], 7);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-      { maxZoom: 18, attribution: "© OpenStreetMap" }).addTo(map);
-    layer = L.layerGroup().addTo(map);
+/* ---------- 지도 (카카오맵 우선, 키가 없거나 못 불러오면 OpenStreetMap) ---------- */
+// 카카오 JavaScript 키를 여기에 적어 두면 모든 접속자가 카카오맵을 봅니다.
+// JavaScript 키는 카카오에 등록한 사이트 도메인에서만 동작하는 공개용 키라 코드에 적어도 됩니다 (REST 키/Admin 키는 절대 안 됩니다).
+const DEFAULT_KAKAO_KEY = "";
+const kakaoKey = () => localStorage.getItem(KAKAO_KEY) || DEFAULT_KAKAO_KEY;
+
+async function initMap() {
+  if (M) return;
+  const key = kakaoKey();
+  if (key) {
+    try {
+      await loadKakao(key);
+      M = makeKakaoMap();
+      M.init($("map"));
+      // 키·도메인이 틀리면 SDK 는 불러와져도 타일이 뜨지 않는다 → 일정 시간 안에 안 뜨면 OpenStreetMap 으로 전환
+      if (await M.ready(8000)) { mapNote = ""; return; }
+      throw new Error("카카오 지도 타일이 표시되지 않았습니다 (JavaScript 키, 사이트 도메인, 카카오맵 사용 설정 확인)");
+    } catch (e) {
+      $("map").innerHTML = ""; M = null;
+      mapNote = " · OpenStreetMap 표시 중 (" + e.message + ")";
+    }
+  } else {
+    mapNote = " · 카카오 키가 없어 OpenStreetMap 표시 중";
   }
-  setTimeout(() => map.invalidateSize(), 0);
+  if (typeof L === "undefined") { mapNote = " · 지도 라이브러리를 불러오지 못했습니다"; M = makeNoMap(); return; }
+  M = makeLeafletMap();
+  M.init($("map"));
 }
+
+/* 지도 어댑터: 두 지도가 같은 함수 이름(init/ready/clear/add/fit/focus/closePopup/resize)을 제공한다 */
+function makeKakaoMap() {
+  const kk = kakao.maps;
+  let map, info, overlays = [];
+  const byId = new Map();
+  const pos = (la, lo) => new kk.LatLng(la, lo);
+  const open = r => { info.setContent(popup(r)); info.setPosition(pos(r.lat, r.lng)); info.open(map); };
+  return {
+    init(el) {
+      map = new kk.Map(el, { center: pos(36.5, 127.8), level: 13 });
+      info = new kk.InfoWindow({ removable: true, zIndex: 5 });
+    },
+    ready(ms) {
+      return new Promise(res => {
+        const t = setTimeout(() => res(false), ms);
+        kk.event.addListener(map, "tilesloaded", () => { clearTimeout(t); res(true); });
+      });
+    },
+    clear() { overlays.forEach(o => o.setMap(null)); overlays = []; byId.clear(); info.close(); },
+    add(r, color) {
+      const dot = document.createElement("div");
+      dot.style.cssText = `width:18px;height:18px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.3);cursor:pointer`;
+      dot.addEventListener("click", () => open(r));
+      const ov = new kk.CustomOverlay({ position: pos(r.lat, r.lng), content: dot, xAnchor: .5, yAnchor: .5, zIndex: 1 });
+      ov.setMap(map); overlays.push(ov); byId.set(r.id, r);
+    },
+    fit(pts) {
+      const b = new kk.LatLngBounds();
+      pts.forEach(p => b.extend(pos(p[0], p[1])));
+      map.setBounds(b, 50, 50, 50, 50);
+      if (map.getLevel() < 4) map.setLevel(4); // 한 곳뿐일 때 너무 확대되지 않게
+    },
+    focus(r) {
+      if (!byId.has(r.id)) return false;
+      map.setCenter(pos(r.lat, r.lng));
+      if (map.getLevel() > 4) map.setLevel(4);
+      open(r); return true;
+    },
+    closePopup() { info.close(); },
+    resize() { map && map.relayout(); }
+  };
+}
+
+function makeLeafletMap() {
+  let map, layer;
+  const byId = new Map();
+  return {
+    init(el) {
+      map = L.map(el).setView([36.5, 127.8], 7);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "© OpenStreetMap" }).addTo(map);
+      layer = L.layerGroup().addTo(map);
+    },
+    ready() { return Promise.resolve(true); },
+    clear() { layer.clearLayers(); byId.clear(); },
+    add(r, color) {
+      const mk = L.circleMarker([r.lat, r.lng], { radius: 9, color: "#fff", weight: 2, fillColor: color, fillOpacity: .9 })
+        .bindPopup(() => popup(r)).addTo(layer);
+      byId.set(r.id, mk);
+    },
+    fit(pts) { map.fitBounds(pts, { padding: [40, 40], maxZoom: 13 }); },
+    focus(r) {
+      const mk = byId.get(r.id);
+      if (!mk) return false;
+      map.setView(mk.getLatLng(), Math.max(map.getZoom(), 14));
+      mk.openPopup(); return true;
+    },
+    closePopup() { map.closePopup(); },
+    resize() { map && map.invalidateSize(); }
+  };
+}
+
+const makeNoMap = () => ({ init() {}, ready: async () => false, clear() {}, add() {}, fit() {}, focus: () => false, closePopup() {}, resize() {} });
 
 const toDate = t => new Date(t);
 const fmt = d => d.toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit",
@@ -539,7 +633,7 @@ const kakaoCall = (fn) => new Promise((resolve, reject) =>
   }));
 
 async function toAddress(lat, lng, nth) {
-  const key = localStorage.getItem(KAKAO_KEY);
+  const key = kakaoKey();
   if (!key) return nominatim(lat, lng, nth);
   await loadKakao(key);
   const geo = new kakao.maps.services.Geocoder();
@@ -591,19 +685,19 @@ function popup(r) {
   if (r.memo) line("메모", r.memo);
   const a = document.createElement("div"); a.className = "acts";
   const det = document.createElement("button"); det.textContent = "상세";
-  det.onclick = () => { map.closePopup(); setView("detail"); selectRow(r.id, true); };
+  det.onclick = () => { M.closePopup(); setView("detail"); selectRow(r.id, true); };
   a.appendChild(det);
   if (isAdmin && viaProxy && r.deviceId) {
     const m = document.createElement("button"); m.textContent = "메모";
     m.onclick = async () => {
       const val = prompt("메모 입력", r.memo || ""); if (val === null) return;
-      try { await adminCall({ action: "memo", deviceId: r.deviceId, timestamp: r.ts, memo: val }); r.memo = val; map.closePopup(); render(DATA); }
+      try { await adminCall({ action: "memo", deviceId: r.deviceId, timestamp: r.ts, memo: val }); r.memo = val; M.closePopup(); render(DATA); }
       catch (e) { alert("저장 실패: " + e.message); }
     };
     const x = document.createElement("button"); x.textContent = "삭제";
     x.onclick = async () => {
       if (!confirm("이 기록을 저장소에서 삭제할까요? 되돌릴 수 없습니다.")) return;
-      map.closePopup(); await deleteRecords([r]);
+      M.closePopup(); await deleteRecords([r]);
     };
     a.append(m, x);
   }
@@ -665,27 +759,22 @@ function draw() {
   const mins = shown.map(r => r.rsrp).filter(x => x !== null);
   $("sMin").textContent = mins.length ? Math.min(...mins) : "-";
 
-  layer.clearLayers(); markerById.clear();
+  if (!M) return; // 지도가 아직 준비되지 않았으면 목록만 그린다 (준비 후 load 가 다시 그림)
+  M.clear();
   const pts = [], css = getComputedStyle(document.documentElement);
   for (const r of shown) {
     if (r.lat === null || r.lng === null) continue;
     const c = css.getPropertyValue("--" + (cls(r) === "none" ? "warn" : cls(r))).trim();
-    const mk = L.circleMarker([r.lat, r.lng], { radius: 9, color: "#fff", weight: 2, fillColor: c, fillOpacity: .9 })
-      .bindPopup(() => popup(r)).addTo(layer);
-    markerById.set(r.id, mk);
+    M.add(r, c);
     pts.push([r.lat, r.lng]);
   }
-  if (pts.length && !fitted) { map.fitBounds(pts, { padding: [40, 40], maxZoom: 13 }); fitted = true; }
+  if (pts.length && !fitted) { M.fit(pts); fitted = true; }
 }
-const markerById = new Map();
 const rsrpClass = v => v === null || v === undefined ? "none" : v <= -120 ? "bad" : v <= -110 ? "warn" : "ok";
 
 /** 목록에서 기록을 누르면 지도가 그 위치로 이동하고 팝업이 열린다 */
 function focusRecord(r) {
-  const mk = markerById.get(r.id);
-  if (!mk) return;
-  map.setView(mk.getLatLng(), Math.max(map.getZoom(), 14));
-  mk.openPopup();
+  if (M) M.focus(r);
 }
 
 /* 전체 기록 칸을 누르면 상세 데이터 표로 이동 (날짜를 선택해 둔 상태면 그 날짜만 필터) */
@@ -968,7 +1057,7 @@ $("kakaoSave").onclick = () => {
   const k = $("kakaoKey").value.trim();
   k ? localStorage.setItem(KAKAO_KEY, k) : localStorage.removeItem(KAKAO_KEY);
   kakaoReady = null; // 키가 바뀌면 SDK 를 새 키로 다시 불러온다 (이미 불러온 SDK 는 페이지를 새로고침해야 교체됨)
-  $("kakaoMsg").textContent = k ? "저장했습니다." : "삭제했습니다. (키가 없으면 OpenStreetMap으로 변환합니다)";
+  $("kakaoMsg").textContent = k ? "저장했습니다. 페이지를 새로고침하면 지도도 카카오맵으로 바뀝니다." : "삭제했습니다. (키가 없으면 지도와 주소 변환에 OpenStreetMap을 씁니다)";
 };
 
 /* ---------- 같은 장소 합치기 (앱의 GitHubUploader.collapseSamePlace 와 같은 규칙) ---------- */
