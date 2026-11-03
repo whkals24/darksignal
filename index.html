@@ -15,24 +15,31 @@
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--ink);display:flex;flex-direction:column;
   font:15px/1.5 "Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif}
-header{display:flex;justify-content:space-between;align-items:center;gap:12px;
-  padding:12px 16px;background:var(--brand);color:#fff;flex:none}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:10px 16px;background:var(--brand);color:#fff;flex:none}
 header h1{margin:0;font-size:17px}
-.who{font-size:13px;display:flex;gap:10px;align-items:center}
+nav{display:flex;gap:4px}
+nav button{background:transparent;color:#fff;border:0;border-radius:6px;padding:6px 12px;opacity:.75}
+nav button.on{background:rgba(255,255,255,.2);opacity:1;font-weight:600}
+.who{font-size:13px;display:flex;gap:8px;align-items:center}
 button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);
   background:var(--panel);color:var(--ink);padding:5px 10px}
-button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
-header button{background:transparent;color:#fff;border-color:rgba(255,255,255,.5)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+header .who button{background:transparent;color:#fff;border-color:rgba(255,255,255,.5)}
 .hidden{display:none!important}
 #login{max-width:340px;width:calc(100% - 32px);margin:12vh auto;padding:24px;background:var(--panel);
   border:1px solid var(--line);border-radius:10px}
 #login h2{margin:0 0 4px;font-size:20px}
 #login p{margin:0 0 16px;color:var(--sub);font-size:13px}
 label{display:block;font-size:13px;color:var(--sub);margin-top:12px}
-input{width:100%;margin-top:4px;padding:9px 10px;font:inherit;color:var(--ink);
+input,select{width:100%;margin-top:4px;padding:9px 10px;font:inherit;color:var(--ink);
   background:var(--bg);border:1px solid var(--line);border-radius:6px}
-#login button{width:100%;margin-top:18px;background:var(--brand);color:#fff;border:0;padding:10px}
+#login button[type=submit]{width:100%;margin-top:18px;background:var(--brand);color:#fff;border:0;padding:10px}
 .err{color:var(--bad);font-size:13px;margin-top:10px;min-height:1.2em}
+.status{font-size:12px;color:var(--sub)}
+header .status{color:rgba(255,255,255,.8)}
+
+/* 지도 화면 */
 .wrap{flex:1;min-height:0;display:flex}
 #map{flex:1;min-width:0}
 #side{width:290px;flex:none;overflow:auto;background:var(--panel);border-left:1px solid var(--line);padding:14px}
@@ -49,22 +56,59 @@ input{width:100%;margin-top:4px;padding:9px 10px;font:inherit;color:var(--ink);
   .wrap{flex-direction:column}
   #side{width:100%;max-height:42%;border-left:0;border-top:1px solid var(--line)}
 }
-.pop{min-width:150px;line-height:1.6}
+.pop{min-width:170px;line-height:1.6}
 .pop b{font-size:15px}
 .pop .row{color:#333}
 .pop .acts{margin-top:6px}
 .pop button{color:#111;background:#fff;border-color:#bbb;margin-right:4px;font-size:13px;padding:2px 8px}
+
+/* 상세 데이터 화면 */
+#detail{flex:1;min-height:0;display:flex;flex-direction:column;padding:12px 16px;gap:10px}
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.filters label{margin:0;min-width:130px}
+.filters .grow{flex:1;min-width:180px}
+.tablebox{flex:1;min-height:0;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px;white-space:nowrap}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left}
+th{position:sticky;top:0;background:var(--panel);cursor:pointer;user-select:none;box-shadow:0 1px 0 var(--line)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--bg)}
+tbody tr.sel{outline:2px solid var(--brand);outline-offset:-2px}
+.tag{display:inline-block;padding:0 7px;border-radius:10px;font-size:12px;color:#fff}
+.tag.ok{background:var(--ok)}.tag.warn{background:var(--warn)}.tag.bad{background:var(--bad)}.tag.none{background:var(--sub)}
+#info{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;max-height:36%;overflow:auto}
+#info h3{margin:0 0 6px;font-size:14px}
+#info dl{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 16px;margin:0}
+#info dt{font-size:12px;color:var(--sub)}#info dd{margin:0 0 4px;font-weight:600;word-break:break-all}
+
+/* 연동 설정 */
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);width:min(420px,calc(100% - 32px));padding:20px}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog h2{margin:0 0 4px;font-size:18px}
+dialog p{margin:0;font-size:12px;color:var(--sub)}
+dialog .btns{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+dialog .btns .pri{background:var(--brand);color:#fff;border:0}
 </style>
 </head>
 <body>
 <header>
   <h1>SignalGuard 음영 현황</h1>
-  <div class="who hidden" id="who"><span id="whoText"></span><button id="logout">로그아웃</button></div>
+  <nav class="hidden" id="nav">
+    <button data-view="map" class="on">지도 현황</button>
+    <button data-view="detail">상세 데이터</button>
+  </nav>
+  <div class="who hidden" id="who">
+    <span class="status" id="srcStatus"></span>
+    <button id="refresh" title="데이터 새로고침">새로고침</button>
+    <button id="cfgBtn">GitHub 연동</button>
+    <span id="whoText"></span><button id="logout">로그아웃</button>
+  </div>
 </header>
 
 <section id="login">
   <h2>로그인</h2>
-  <p>테스트 버전 · 샘플 데이터가 표시됩니다.</p>
+  <p>SignalGuard 앱이 수집한 신호 기록을 확인합니다.</p>
   <form id="loginForm">
     <label>아이디<input id="uid" autocomplete="username" required></label>
     <label>비밀번호<input id="pw" type="password" autocomplete="current-password" required></label>
@@ -73,6 +117,7 @@ input{width:100%;margin-top:4px;padding:9px 10px;font:inherit;color:var(--ink);
   </form>
 </section>
 
+<!-- 메인: 지도 -->
 <div class="wrap hidden" id="wrap">
   <div id="map"></div>
   <aside id="side">
@@ -83,6 +128,40 @@ input{width:100%;margin-top:4px;padding:9px 10px;font:inherit;color:var(--ink);
   </aside>
 </div>
 
+<!-- 메뉴: 상세 데이터 -->
+<div id="detail" class="hidden">
+  <div class="filters">
+    <label>날짜<select id="fDay"><option value="">전체</option></select></label>
+    <label>통신사<select id="fOp"><option value="">전체</option></select></label>
+    <label>단계<select id="fLv"><option value="">전체</option></select></label>
+    <label class="grow">검색 (주소·지역·셀ID)<input id="fQ" type="search" placeholder="예: 설악산"></label>
+    <button id="csv">CSV 저장</button>
+  </div>
+  <div class="status" id="count"></div>
+  <div class="tablebox"><table>
+    <thead><tr id="thead"></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table></div>
+  <div id="info" class="hidden"></div>
+</div>
+
+<dialog id="cfg">
+  <form method="dialog" id="cfgForm">
+    <h2>GitHub 연동</h2>
+    <p>앱이 올린 기록 파일(JSON)을 읽어옵니다. 비워두면 이 페이지와 같은 저장소의 <code>data/records.json</code>을 읽습니다 (GitHub Pages).</p>
+    <label>소유자 (owner)<input id="cOwner" placeholder="예: myname"></label>
+    <label>저장소 (repo)<input id="cRepo" placeholder="예: signalguard-data"></label>
+    <label>브랜치<input id="cBranch" placeholder="main"></label>
+    <label>파일 경로<input id="cPath" placeholder="data/records.json"></label>
+    <label>토큰 (비공개 저장소만, 읽기 전용 권장)<input id="cToken" type="password" autocomplete="off"></label>
+    <p>토큰은 이 브라우저(localStorage)에만 저장됩니다.</p>
+    <div class="btns">
+      <button type="button" id="cCancel">취소</button>
+      <button type="submit" class="pri">저장 후 불러오기</button>
+    </div>
+  </form>
+</dialog>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
 /* ===== 테스트용 관리자 계정 (페이지 소스에 그대로 보이므로 테스트에만 사용) ===== */
@@ -91,29 +170,120 @@ const ADMIN_PW = "qnrtjdnf1!";
 /* ================================================================== */
 
 const $ = id => document.getElementById(id);
-let isAdmin = false, map = null, layer = null, fitted = false;
+let isAdmin = false, map = null, layer = null, fitted = false, timer = null;
 
-/* 테스트용 샘플 데이터 (실제 앱 연동 전까지 사용) */
+/* ---------- 데이터 형식 ----------
+ 앱 Room(signal_sample)과 같은 필드명의 JSON 배열(또는 {records:[...]}).
+ 필수: timestamp(ms), latitude, longitude
+ 선택: accuracy, speed, regionType, radioTechnology, lteRsrp, lteRsrq, lteRssnr,
+       nrSsRsrp, nrSsRsrq, nrSsSinr, serviceState, alertLevel,
+       operatorName, plmn, cellId, pci, tac, address, region, memo */
+const LEVELS = {
+  NORMAL: ["양호", "ok"], CAUTION: ["주의", "warn"], DANGER: ["위험", "bad"],
+  CRITICAL: ["심각", "bad"], EMERGENCY_ONLY: ["긴급통화만", "bad"],
+  DISCONNECTED: ["단절", "bad"], UNKNOWN: ["알 수 없음", "none"]
+};
+const REGIONS = { GENERAL: "일반", MOUNTAIN: "산악", SEA: "해상", EXCLUDED_BUILDING: "건물(제외)", UNKNOWN: "알 수 없음" };
+const SERVICE = { IN_SERVICE: "서비스 중", OUT_OF_SERVICE: "서비스 불가", EMERGENCY_ONLY: "긴급통화만", POWER_OFF: "전원 꺼짐", UNKNOWN: "알 수 없음" };
+const RAT = { LTE: "LTE", NR: "5G SA", NSA: "5G NSA", OTHER: "기타", UNKNOWN: "-" };
+
+function num(v) { return typeof v === "number" && isFinite(v) ? v : null; }
+
+/** 앱의 SignalReading.servingRsrp 와 같은 규칙으로 서빙 값을 고른다. */
+function normalize(raw, i) {
+  const nrFirst = raw.radioTechnology === "NR";
+  const pick = (nr, lte) => nrFirst ? (num(nr) ?? num(lte)) : num(lte);
+  const r = {
+    id: raw.id ?? ("r" + i),
+    ts: raw.timestamp ?? raw.ts,
+    lat: num(raw.latitude ?? raw.lat), lng: num(raw.longitude ?? raw.lng),
+    accuracy: num(raw.accuracy), speed: num(raw.speed),
+    regionType: raw.regionType, region: raw.region || REGIONS[raw.regionType] || "",
+    rat: raw.radioTechnology,
+    lteRsrp: num(raw.lteRsrp), lteRsrq: num(raw.lteRsrq), lteSinr: num(raw.lteRssnr),
+    nrRsrp: num(raw.nrSsRsrp), nrRsrq: num(raw.nrSsRsrq), nrSinr: num(raw.nrSsSinr),
+    service: raw.serviceState, alert: raw.alertLevel,
+    op: raw.operatorName || "", plmn: raw.plmn || "",
+    cellId: num(raw.cellId), pci: num(raw.pci), tac: num(raw.tac),
+    address: raw.address || "", memo: raw.memo || ""
+  };
+  r.rsrp = pick(raw.nrSsRsrp, raw.lteRsrp) ?? num(raw.rsrp);
+  r.rsrq = pick(raw.nrSsRsrq, raw.lteRsrq);
+  r.sinr = pick(raw.nrSsSinr, raw.lteRssnr);
+  r.isNr = raw.radioTechnology === "NR";
+  r.level = LEVELS[r.alert] ? r.alert
+    : r.rsrp === null ? "UNKNOWN" : r.rsrp <= -120 ? "DANGER" : r.rsrp <= -110 ? "CAUTION" : "NORMAL";
+  return r;
+}
+
+/* ---------- 샘플 (연동 파일이 없을 때) ---------- */
 const PLACES = [
   ["설악산", 38.12, 128.46], ["지리산", 35.33, 127.73], ["한라산", 33.36, 126.53],
   ["울릉도 해상", 37.50, 130.90], ["서해 덕적도 해상", 37.23, 126.15], ["태백산", 37.10, 128.92]
 ];
 function makeSample() {
-  const out = [], now = Date.now();
+  const out = [], now = Date.now(), ops = [["KT", "45008"], ["SKT", "45005"], ["LG U+", "45006"]];
   for (let i = 0; i < 30; i++) {
-    const p = PLACES[i % 6], rsrp = -(105 + (i * 7) % 30);
+    const p = PLACES[i % 6], rsrp = -(105 + (i * 7) % 30), o = ops[i % 3], nr = i % 4 === 0;
     out.push({
-      id: "s" + i,
-      ts: now - Math.floor(i / 3) * 86400000 - ((i * 37) % 600) * 60000,
-      rsrp, level: rsrp <= -120 ? "위험" : rsrp <= -110 ? "주의" : "양호",
-      region: p[0], lat: p[1] + ((i * 13) % 10) / 1000, lng: p[2] + ((i * 17) % 10) / 1000,
+      id: i + 1, timestamp: now - Math.floor(i / 3) * 86400000 - ((i * 37) % 600) * 60000,
+      latitude: p[1] + ((i * 13) % 10) / 1000, longitude: p[2] + ((i * 17) % 10) / 1000,
+      accuracy: 8 + i % 12, speed: (i % 5) * 0.4,
+      regionType: i % 6 === 3 || i % 6 === 4 ? "SEA" : "MOUNTAIN",
+      radioTechnology: nr ? "NR" : "LTE",
+      lteRsrp: nr ? null : rsrp, lteRsrq: nr ? null : -(8 + i % 9), lteRssnr: nr ? null : (i % 15) - 5,
+      nrSsRsrp: nr ? rsrp : null, nrSsRsrq: nr ? -(9 + i % 8) : null, nrSsSinr: nr ? (i % 12) - 4 : null,
+      serviceState: rsrp <= -128 ? "OUT_OF_SERVICE" : "IN_SERVICE",
+      alertLevel: rsrp <= -128 ? "DISCONNECTED" : rsrp <= -120 ? "CRITICAL" : rsrp <= -110 ? "CAUTION" : "NORMAL",
+      operatorName: o[0], plmn: o[1], cellId: 12345600 + i * 37, pci: 100 + i * 5, tac: 20000 + i,
       memo: i % 5 === 0 ? "테스트 메모" : ""
     });
   }
   return out;
 }
-let DATA = makeSample();
 
+/* ---------- GitHub 연동 ---------- */
+const CFG_KEY = "sg_cfg";
+const getCfg = () => { try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch { return {}; } };
+
+async function fetchRecords() {
+  const c = getCfg();
+  let url, headers = {}, label;
+  if (c.owner && c.repo) {
+    const path = (c.path || "data/records.json").replace(/^\/+/, "");
+    url = `https://api.github.com/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}/contents/${path.split("/").map(encodeURIComponent).join("/")}`
+        + (c.branch ? `?ref=${encodeURIComponent(c.branch)}` : "");
+    headers.Accept = "application/vnd.github.raw+json";
+    if (c.token) headers.Authorization = "Bearer " + c.token;
+    label = `GitHub ${c.owner}/${c.repo}`;
+  } else {
+    url = "data/records.json?t=" + Date.now();
+    label = "data/records.json";
+  }
+  const res = await fetch(url, { headers, cache: "no-store" });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const j = await res.json();
+  const arr = Array.isArray(j) ? j : j.records;
+  if (!Array.isArray(arr)) throw new Error("형식 오류: 배열이 아닙니다");
+  return { list: arr, label };
+}
+
+async function load() {
+  let list, msg;
+  try {
+    const r = await fetchRecords();
+    list = r.list; msg = `${r.label} · ${list.length}건 · ${new Date().toLocaleTimeString("ko-KR")}`;
+  } catch (e) {
+    list = makeSample(); msg = `샘플 데이터 (연동 실패: ${e.message})`;
+  }
+  $("srcStatus").textContent = msg;
+  DATA = list.map(normalize).filter(r => r.ts != null);
+  fitted = false;
+  render(DATA);
+}
+let DATA = [];
+
+/* ---------- 로그인 / 화면 전환 ---------- */
 $("loginForm").addEventListener("submit", e => {
   e.preventDefault();
   $("loginErr").textContent = "";
@@ -121,19 +291,48 @@ $("loginForm").addEventListener("submit", e => {
     if (typeof L === "undefined") { $("loginErr").textContent = "지도 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하세요."; return; }
     isAdmin = true;
     $("whoText").textContent = ADMIN_ID + " (관리자)";
-    show(true); initMap(); fitted = false; render(DATA);
+    show(true); setView("map"); initMap(); load();
+    clearInterval(timer); timer = setInterval(load, 60000);
   } else {
     $("loginErr").textContent = "아이디 또는 비밀번호가 올바르지 않습니다.";
   }
 });
-$("logout").addEventListener("click", () => { $("pw").value = ""; show(false); });
+$("logout").addEventListener("click", () => { $("pw").value = ""; clearInterval(timer); show(false); });
+$("refresh").addEventListener("click", load);
 
 function show(on) {
   $("login").classList.toggle("hidden", on);
-  $("wrap").classList.toggle("hidden", !on);
   $("who").classList.toggle("hidden", !on);
+  $("nav").classList.toggle("hidden", !on);
+  if (!on) { $("wrap").classList.add("hidden"); $("detail").classList.add("hidden"); }
 }
+let view = "map";
+function setView(v) {
+  view = v;
+  $("wrap").classList.toggle("hidden", v !== "map");
+  $("detail").classList.toggle("hidden", v !== "detail");
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
+  if (v === "map" && map) setTimeout(() => map.invalidateSize(), 0);
+}
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => setView(b.dataset.view));
 
+/* 연동 설정 창 */
+$("cfgBtn").addEventListener("click", () => {
+  const c = getCfg();
+  $("cOwner").value = c.owner || ""; $("cRepo").value = c.repo || "";
+  $("cBranch").value = c.branch || ""; $("cPath").value = c.path || ""; $("cToken").value = c.token || "";
+  $("cfg").showModal();
+});
+$("cCancel").onclick = () => $("cfg").close();
+$("cfgForm").addEventListener("submit", () => {
+  localStorage.setItem(CFG_KEY, JSON.stringify({
+    owner: $("cOwner").value.trim(), repo: $("cRepo").value.trim(), branch: $("cBranch").value.trim(),
+    path: $("cPath").value.trim(), token: $("cToken").value.trim()
+  }));
+  load();
+});
+
+/* ---------- 지도 ---------- */
 function initMap() {
   if (!map) {
     map = L.map("map").setView([36.5, 127.8], 7);
@@ -144,28 +343,37 @@ function initMap() {
   setTimeout(() => map.invalidateSize(), 0);
 }
 
-const toDate = t => t && t.toDate ? t.toDate() : new Date(t);
+const toDate = t => new Date(t);
 const fmt = d => d.toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit",
   hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
-const cls = r => r.rsrp <= -120 ? "bad" : r.rsrp <= -110 ? "warn" : "ok";
+const cls = r => LEVELS[r.level][1];
+const v = (x, unit = "") => x === null || x === undefined || x === "" ? "-" : x + unit;
 
 function popup(r) {
   const el = document.createElement("div"); el.className = "pop";
-  const line = (k, v) => { const d = document.createElement("div"); d.className = "row"; d.textContent = k + ": " + v; el.appendChild(d); };
-  const t = document.createElement("b"); t.textContent = "RSRP " + (r.rsrp ?? "-") + " dBm"; el.appendChild(t);
+  const line = (k, val) => { const d = document.createElement("div"); d.className = "row"; d.textContent = k + ": " + val; el.appendChild(d); };
+  const t = document.createElement("b"); t.textContent = "RSRP " + v(r.rsrp) + " dBm"; el.appendChild(t);
   line("시각", fmt(toDate(r.ts)));
-  if (r.level) line("단계", r.level);
+  line("단계", LEVELS[r.level][0]);
+  line("RSRQ / SINR", v(r.rsrq) + " / " + v(r.sinr));
+  if (r.op) line("통신사", r.op + " " + (RAT[r.rat] || ""));
   if (r.region) line("지역", r.region);
+  if (r.address) line("주소", r.address);
   line("좌표", r.lat.toFixed(5) + ", " + r.lng.toFixed(5));
   if (r.memo) line("메모", r.memo);
+  const a = document.createElement("div"); a.className = "acts";
+  const det = document.createElement("button"); det.textContent = "상세";
+  det.onclick = () => { map.closePopup(); setView("detail"); selectRow(r.id, true); };
+  a.appendChild(det);
   if (isAdmin) {
-    const a = document.createElement("div"); a.className = "acts";
     const m = document.createElement("button"); m.textContent = "메모";
-    m.onclick = async () => { const v = prompt("메모 입력", r.memo || ""); if (v !== null) { r.memo = v; map.closePopup(); render(DATA); } };
-    const x = document.createElement("button"); x.textContent = "삭제";
-    x.onclick = async () => { if (confirm("이 기록을 삭제할까요?")) { DATA = DATA.filter(x => x.id !== r.id); map.closePopup(); render(DATA); } };
-    a.append(m, x); el.appendChild(a);
+    m.onclick = () => { const val = prompt("메모 입력", r.memo || ""); if (val !== null) { r.memo = val; map.closePopup(); render(DATA); } };
+    const x = document.createElement("button"); x.textContent = "숨김";
+    x.title = "이 화면에서만 숨깁니다 (저장소 데이터는 그대로)";
+    x.onclick = () => { if (confirm("이 기록을 화면에서 숨길까요? (저장소 파일은 변경되지 않습니다)")) { DATA = DATA.filter(q => q.id !== r.id); map.closePopup(); render(DATA); } };
+    a.append(m, x);
   }
+  el.appendChild(a);
   return el;
 }
 
@@ -177,14 +385,15 @@ function render(list) {
   all = list;
   if (selDay && !list.some(r => dayKey(r) === selDay)) selDay = null;
   draw();
+  fillFilters();
+  drawTable();
 }
 
 function draw() {
-  // 날짜별 집계
   const g = {};
   for (const r of all) {
     const k = dayKey(r); const o = g[k] || (g[k] = { n: 0, min: null });
-    o.n++; if (typeof r.rsrp === "number" && (o.min === null || r.rsrp < o.min)) o.min = r.rsrp;
+    o.n++; if (r.rsrp !== null && (o.min === null || r.rsrp < o.min)) o.min = r.rsrp;
   }
   const keys = Object.keys(g).sort().reverse(), max = Math.max(1, ...keys.map(k => g[k].n));
   const ul = $("days"); ul.innerHTML = "";
@@ -200,18 +409,17 @@ function draw() {
   }
   if (!keys.length) { const li = document.createElement("li"); li.textContent = "기록이 없습니다."; ul.appendChild(li); }
 
-  // 지도 + 요약 (선택한 날짜만)
   const shown = selDay ? all.filter(r => dayKey(r) === selDay) : all;
   $("sTotal").textContent = shown.length;
   $("sTotalL").textContent = selDay ? selDay.slice(5).replace("-", "/") + " 기록" : "전체 기록";
-  const mins = shown.map(r => r.rsrp).filter(v => typeof v === "number");
+  const mins = shown.map(r => r.rsrp).filter(x => x !== null);
   $("sMin").textContent = mins.length ? Math.min(...mins) : "-";
 
   layer.clearLayers();
   const pts = [], css = getComputedStyle(document.documentElement);
   for (const r of shown) {
-    if (typeof r.lat !== "number" || typeof r.lng !== "number") continue;
-    const c = css.getPropertyValue("--" + cls(r)).trim();
+    if (r.lat === null || r.lng === null) continue;
+    const c = css.getPropertyValue("--" + (cls(r) === "none" ? "warn" : cls(r))).trim();
     L.circleMarker([r.lat, r.lng], { radius: 9, color: "#fff", weight: 2, fillColor: c, fillOpacity: .9 })
       .bindPopup(() => popup(r)).addTo(layer);
     pts.push([r.lat, r.lng]);
@@ -219,6 +427,144 @@ function draw() {
   if (pts.length && !fitted) { map.fitBounds(pts, { padding: [40, 40], maxZoom: 13 }); fitted = true; }
 }
 $("allDays").addEventListener("click", () => { selDay = null; fitted = false; draw(); });
+
+/* ---------- 상세 데이터 표 ---------- */
+const COLS = [
+  ["ts", "시각", r => fmt(toDate(r.ts))],
+  ["level", "단계", r => LEVELS[r.level][0], "tag"],
+  ["address", "주소/지역", r => r.address || r.region || "-"],
+  ["lat", "위도", r => r.lat === null ? "-" : r.lat.toFixed(5), "n"],
+  ["lng", "경도", r => r.lng === null ? "-" : r.lng.toFixed(5), "n"],
+  ["rsrp", "RSRP", r => v(r.rsrp), "n"],
+  ["rsrq", "RSRQ", r => v(r.rsrq), "n"],
+  ["sinr", "SINR", r => v(r.sinr), "n"],
+  ["rat", "망", r => RAT[r.rat] || "-"],
+  ["op", "통신사", r => r.op || "-"],
+  ["plmn", "PLMN", r => r.plmn || "-"],
+  ["cellId", "셀 ID", r => v(r.cellId), "n"],
+  ["pci", "PCI", r => v(r.pci), "n"],
+  ["tac", "TAC", r => v(r.tac), "n"],
+  ["service", "서비스", r => SERVICE[r.service] || "-"]
+];
+let sortKey = "ts", sortDir = -1, selId = null;
+
+const thead = $("thead");
+for (const [key, label, , kind] of COLS) {
+  const th = document.createElement("th"); th.textContent = label;
+  if (kind === "n") th.className = "n";
+  th.onclick = () => { sortDir = sortKey === key ? -sortDir : (key === "ts" ? -1 : 1); sortKey = key; drawTable(); };
+  thead.appendChild(th);
+}
+
+function fillSelect(sel, values, labelOf = x => x) {
+  const cur = sel.value;
+  sel.length = 1;
+  for (const x of values) { const o = document.createElement("option"); o.value = x; o.textContent = labelOf(x); sel.appendChild(o); }
+  sel.value = values.includes(cur) ? cur : "";
+}
+function fillFilters() {
+  fillSelect($("fDay"), [...new Set(all.map(dayKey))].sort().reverse());
+  fillSelect($("fOp"), [...new Set(all.map(r => r.op).filter(Boolean))].sort());
+  fillSelect($("fLv"), [...new Set(all.map(r => r.level))], k => LEVELS[k][0]);
+}
+["fDay", "fOp", "fLv"].forEach(id => $(id).onchange = drawTable);
+$("fQ").oninput = drawTable;
+
+function filtered() {
+  const q = $("fQ").value.trim().toLowerCase(), day = $("fDay").value, op = $("fOp").value, lv = $("fLv").value;
+  const out = all.filter(r =>
+    (!day || dayKey(r) === day) && (!op || r.op === op) && (!lv || r.level === lv) &&
+    (!q || [r.address, r.region, r.memo, r.cellId, r.plmn, r.op].join(" ").toLowerCase().includes(q)));
+  out.sort((a, b) => {
+    const x = a[sortKey], y = b[sortKey];
+    if (x === y) return 0;
+    if (x === null || x === undefined || x === "") return 1;
+    if (y === null || y === undefined || y === "") return -1;
+    return (x < y ? -1 : 1) * sortDir;
+  });
+  return out;
+}
+
+const MAX_ROWS = 1000;
+function drawTable() {
+  const rows = filtered(), body = $("tbody"); body.innerHTML = "";
+  for (const r of rows.slice(0, MAX_ROWS)) {
+    const tr = document.createElement("tr"); tr.dataset.id = r.id;
+    if (r.id === selId) tr.className = "sel";
+    for (const [, , f, kind] of COLS) {
+      const td = document.createElement("td");
+      if (kind === "n") td.className = "n";
+      if (kind === "tag") { const s = document.createElement("span"); s.className = "tag " + cls(r); s.textContent = f(r); td.appendChild(s); }
+      else td.textContent = f(r);
+      tr.appendChild(td);
+    }
+    tr.onclick = () => selectRow(r.id);
+    body.appendChild(tr);
+  }
+  $("count").textContent = `${rows.length}건` + (rows.length > MAX_ROWS ? ` (상위 ${MAX_ROWS}건만 표시, 필터로 좁혀주세요)` : "");
+  if (selId !== null) showInfo(all.find(r => r.id === selId));
+}
+
+function selectRow(id, scroll) {
+  selId = id;
+  const r = all.find(x => x.id === id);
+  if (scroll) { $("fDay").value = ""; $("fOp").value = ""; $("fLv").value = ""; $("fQ").value = ""; }
+  drawTable(); showInfo(r);
+  if (scroll) document.querySelector(`tr[data-id="${CSS.escape(String(id))}"]`)?.scrollIntoView({ block: "center" });
+}
+
+const geoCache = new Map();
+async function reverseGeocode(r) {
+  const key = r.lat.toFixed(4) + "," + r.lng.toFixed(4);
+  if (geoCache.has(key)) return geoCache.get(key);
+  const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=ko&lat=${r.lat}&lon=${r.lng}`);
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const j = await res.json(); const name = j.display_name || "";
+  geoCache.set(key, name); return name;
+}
+
+function showInfo(r) {
+  const box = $("info"); box.innerHTML = "";
+  if (!r) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  const h = document.createElement("h3"); h.textContent = "상세 정보 · " + fmt(toDate(r.ts)); box.appendChild(h);
+  const dl = document.createElement("dl");
+  const add = (k, val) => { const dt = document.createElement("dt"), dd = document.createElement("dd"); dt.textContent = k; dd.textContent = val; dl.append(dt, dd); return dd; };
+  const addrDd = add("주소", r.address || "(미조회)");
+  add("위치", r.lat === null ? "-" : r.lat.toFixed(6) + ", " + r.lng.toFixed(6));
+  add("정확도 / 속도", v(r.accuracy, " m") + " / " + (r.speed === null ? "-" : (r.speed * 3.6).toFixed(1) + " km/h"));
+  add("지역 구분", REGIONS[r.regionType] || r.region || "-");
+  add("단계", LEVELS[r.level][0]);
+  add("서비스 상태", SERVICE[r.service] || "-");
+  add("통신사 / PLMN", v(r.op) + " / " + v(r.plmn));
+  add("접속 망", RAT[r.rat] || "-");
+  add("LTE RSRP / RSRQ / SINR", [r.lteRsrp, r.lteRsrq, r.lteSinr].map(x => v(x)).join(" / "));
+  add("5G RSRP / RSRQ / SINR", [r.nrRsrp, r.nrRsrq, r.nrSinr].map(x => v(x)).join(" / "));
+  add("셀 ID", r.cellId === null ? "-" : r.cellId + (r.isNr ? " (NCI)" : ` (eNB ${r.cellId >> 8}, 셀 ${r.cellId & 255})`));
+  add("PCI / TAC", v(r.pci) + " / " + v(r.tac));
+  if (r.memo) add("메모", r.memo);
+  box.appendChild(dl);
+  if (!r.address && r.lat !== null) {
+    const b = document.createElement("button"); b.textContent = "주소 조회 (OpenStreetMap)"; b.style.marginTop = "6px";
+    b.onclick = async () => {
+      b.disabled = true; b.textContent = "조회 중...";
+      try { r.address = await reverseGeocode(r); addrDd.textContent = r.address || "(결과 없음)"; b.remove(); drawTable(); }
+      catch (e) { b.disabled = false; b.textContent = "조회 실패 - 다시 시도"; }
+    };
+    box.appendChild(b);
+  }
+}
+
+/* CSV 저장 (엑셀에서 한글이 깨지지 않도록 BOM 포함) */
+$("csv").onclick = () => {
+  const esc = s => { s = String(s); if (/^([=+@\t\r]|-(?!\d))/.test(s)) s = "'" + s; return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [COLS.map(c => c[1]).join(",")];
+  for (const r of filtered()) lines.push(COLS.map(c => esc(c[2](r))).join(","));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv" }));
+  a.download = "signalguard_" + new Date().toISOString().slice(0, 10) + ".csv";
+  a.click(); URL.revokeObjectURL(a.href);
+};
 </script>
 </body>
 </html>
