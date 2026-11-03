@@ -70,6 +70,7 @@ header .status{color:rgba(255,255,255,.8)}
 #days ul.recs{list-style:none;margin:0;padding:0 6px 6px;max-height:340px;overflow:auto}
 #days ul.recs button{display:grid;grid-template-columns:44px auto 1fr;gap:8px;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:6px 6px;border-radius:6px;font-size:13px}
 #days ul.recs button:hover{background:var(--bg)}
+#days ul.recs button.hit{background:var(--bg);box-shadow:inset 3px 0 0 var(--brand);font-weight:700}
 #days ul.recs .t{color:var(--sub);font-variant-numeric:tabular-nums}
 #days ul.recs .p{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)}
 @media (max-width:700px){
@@ -757,7 +758,7 @@ function draw() {
     const n = document.createElement("span"); n.className = "cnt"; n.textContent = g[k].n + "건";
     const chip = document.createElement("span"); chip.className = "chip " + rsrpClass(g[k].min); chip.textContent = g[k].min ?? "-";
     b.append(chev, d, n, chip);
-    b.onclick = () => { selDay = open ? null : k; fitted = false; draw(); };
+    b.onclick = () => { selDay = open ? null : k; hitId = null; fitted = false; draw(); };
     li.appendChild(b);
     if (open) { // 선택한 날짜 아래로 그날의 기록이 펼쳐지고, 아래 날짜들은 밀려 내려간다
       const recs = document.createElement("ul"); recs.className = "recs";
@@ -767,7 +768,13 @@ function draw() {
         const tag = document.createElement("span"); tag.className = "tag " + cls(r); tag.textContent = (r.rsrp ?? "-") + " · " + LEVELS[r.level][0];
         const p = document.createElement("span"); p.className = "p"; p.textContent = r.address || r.region || "";
         rb.append(t, tag, p);
-        rb.onclick = () => focusRecord(r);
+        if (r.id === hitId) rb.classList.add("hit"); // 최저 RSRP 칸에서 넘어온 기록 / 방금 누른 기록 표시
+        rb.onclick = () => {
+          hitId = r.id;
+          recs.querySelectorAll("button.hit").forEach(x => x.classList.remove("hit"));
+          rb.classList.add("hit");
+          focusRecord(r);
+        };
         rl.appendChild(rb); recs.appendChild(rl);
       }
       li.appendChild(recs);
@@ -815,13 +822,17 @@ function focusRecord(r) {
 }
 
 /* 최저 RSRP 칸을 누르면 지도에서 그 기록(어디·언제)을 보여준다. 좁은 화면에서는 지도가 보이도록 스크롤한다. */
-let minRec = null;
+let minRec = null, hitId = null;
 $("tileMin").addEventListener("click", () => {
   if (!minRec) return;
   setView("map");
-  const shownOnMap = !selDay || dayKey(minRec) === selDay; // 선택한 날짜 지도에는 그 날짜 기록만 그려져 있다
-  if (!shownOnMap) { selDay = dayKey(minRec); fitted = false; draw(); }
+  // 그 기록이 있는 날짜를 날짜별 현황에서 펼치고, 목록에서 그 기록을 표시한 뒤, 지도를 그 위치로 보낸다.
+  selDay = dayKey(minRec);
+  hitId = minRec.id;
+  fitted = false;
+  draw();
   focusRecord(minRec);
+  document.querySelector("#days button.hit")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   $("map").scrollIntoView({ block: "nearest", behavior: "smooth" });
 });
 
@@ -831,7 +842,7 @@ $("tileTotal").addEventListener("click", () => {
   drawTable();
   setView("detail");
 });
-$("allDays").addEventListener("click", () => { selDay = null; fitted = false; draw(); });
+$("allDays").addEventListener("click", () => { selDay = null; hitId = null; fitted = false; draw(); });
 
 /* ---------- 상세 데이터 표 ---------- */
 const COLS = [
