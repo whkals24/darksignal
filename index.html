@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>음영현황</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 :root{--bg:#eef1ef;--panel:#fff;--ink:#18262e;--sub:#5d6d75;--line:#d5dcd9;
   --ok:#2f7d5b;--warn:#c98a12;--bad:#b83a2e;--brand:#1d4d63}
@@ -42,9 +41,43 @@ label.chk input{width:auto;margin:0}
 header .status{color:rgba(255,255,255,.8)}
 
 /* 지도 화면 */
-.wrap{flex:1;min-height:0;display:flex}
+.wrap{flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto}
+.maprow{display:flex;flex:none;height:max(520px,calc(100vh - 110px))}
+/* 현황 공통 디자인: 같은 패널·같은 타일·같은 글자 크기 */
+#ov{flex:none;padding:12px 16px;display:grid;grid-template-columns:1.5fr 1fr;gap:10px;background:var(--bg);align-items:start}
+.pn{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0}
+.pn h2,.pn summary{margin:0 0 8px;font-size:14px;font-weight:700;color:var(--ink)}
+.pn summary{margin:0;cursor:pointer;list-style-position:inside}
+.pn small{font-size:11px;font-weight:400;color:var(--sub);margin-left:4px}
+.refnote{margin-top:6px;font-size:11px;color:var(--sub)}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.tile2{border:1px solid var(--line);border-left:4px solid var(--c,var(--sub));border-radius:8px;background:color-mix(in srgb,var(--c,var(--sub)) 9%,var(--panel));
+  padding:6px 10px;text-align:left;font:inherit;color:var(--ink);line-height:1.25}
+button.tile2{cursor:pointer}button.tile2:hover{border-color:var(--c)}
+.tile2.on{outline:2px solid var(--c);outline-offset:1px}
+.tile2 b{display:block;font-size:22px;color:var(--c,var(--ink))}.tile2 span{display:block;font-size:12px}.tile2 em{display:block;font-size:10.5px;font-style:normal;color:var(--sub)}
+.tile2.bad{--c:var(--bad)}.tile2.warn{--c:var(--warn)}.tile2.ok{--c:var(--ok)}.tile2.none{--c:var(--sub)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chips span{font-size:11.5px;background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:1px 9px;color:var(--sub)}
+.chips span b{color:var(--ink);margin-left:3px}
+.chips .chipbtn{font-size:11.5px;background:var(--bg);border:1px solid var(--brand);border-radius:99px;padding:1px 10px;color:var(--brand);cursor:pointer}
+.chips .chipbtn b{color:var(--ink);margin-left:4px}.chips .chipbtn:hover{background:color-mix(in srgb,var(--brand) 12%,var(--bg))}
+.carrs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.carr{border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--bg);line-height:1.3}
+.carr strong{display:block;font-size:13px}.carr b{font-size:20px;color:var(--brand)}
+.carr div{font-size:11.5px;color:var(--sub)}
+@media(max-width:600px){.carrs{grid-template-columns:repeat(2,1fr)}}
+.funnel{display:flex;flex-direction:column;gap:5px}
+.funnel div{display:grid;grid-template-columns:118px 1fr 62px;gap:8px;align-items:center;font-size:12px}
+.funnel i{height:8px;border-radius:4px;background:var(--brand);width:var(--w);min-width:6px;opacity:.85}
+.funnel b{text-align:right;font-size:12.5px}
+.mini{max-height:190px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.mini table{font-size:12px}.mini th,.mini td{padding:3px 8px}
+details.pn[open]{grid-column:auto}
+@media(max-width:1000px){#ov{grid-template-columns:1fr}.tiles{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:800px){.maprow{flex-direction:column;height:auto}.mapbox{height:60vh;flex:none}#side{width:auto;border-left:0;border-top:1px solid var(--line)}}
 .mapbox{flex:1;min-width:0;min-height:0;position:relative}
-#map{position:absolute;inset:0}
+#map{position:absolute;inset:0;background:#e6ebee} /* 타일이 막혀도 점은 보이도록 바탕색을 둔다 */
 #mapBack{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:1000;display:flex;align-items:center;gap:8px;
   padding:9px 16px;border-radius:99px;border:0;background:var(--brand);color:#fff;font-weight:600;font-size:14px;
   box-shadow:0 2px 10px rgba(0,0,0,.35);cursor:pointer;white-space:nowrap}
@@ -150,8 +183,10 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
 <header>
   <h1>음영현황 <small id="ver" style="font-weight:400;font-size:13px;opacity:.85"></small></h1>
   <nav class="hidden" id="nav">
-    <button data-view="map" class="on">지도 현황</button>
+    <button data-view="map" class="on">현황</button>
     <button data-view="detail">상세 데이터</button>
+    <button data-view="field">현장측정</button>
+    <button data-view="targets">측정대상</button>
     <button data-view="admin" class="adm">관리</button>
   </nav>
   <div class="who hidden" id="who">
@@ -175,6 +210,33 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
 
 <!-- 메인: 지도 -->
 <div class="wrap hidden" id="wrap">
+  <!-- 현황: 진단 도구(ev-signal-diagnosis)의 현황 탭과 같은 구성 (카드 → 통신사/시군구 집계 → 단계별 현황) -->
+  <section id="ov">
+    <div class="pn">
+      <h2>진행 현황 <small>현장측정 기록 기준</small></h2>
+      <div class="tiles" id="ovStats"></div>
+      <div class="chips" id="ovChips"></div>    </div>
+    <div class="pn">
+      <h2>단계별 현황 <small>원본 참조 · 현장 입력과 별개</small></h2>
+      <div class="funnel">
+        <div title="서울 4,814곳 · 경기 6,979곳 / 공동주택 8,092곳(114,624기) / 지하 충전기의 85.2%"><span>수도권 지하 충전시설</span><i style="--w:100%"></i><b>11,793곳</b></div>
+        <div title="건축물대장 확인분 · 관할 서울 14구·경기 10개 시군 / 충전시설 2,863곳 중 공동주택"><span>북서울 관할 공동주택</span><i style="--w:17.8%"></i><b>2,104곳</b></div>
+        <div title="1,767개 단지 · 500세대 미만 1,044곳 · 이후 허가 178곳 제외 · 27,877기"><span>2017.5.26 이전 허가</span><i style="--w:16.3%"></i><b>1,926곳</b></div>
+        <div title="833개 단지 · 이전 허가의 47.1% · 강서·양천·마포·은평·서대문·고양·파주 · 13,675기"><span>시범 권역 7개 시구</span><i style="--w:7.7%"></i><b>907곳</b></div>
+      </div>
+      <div class="refnote">기준일 충전시설 '26.10.19 · 건축물대장 '26.11.10 · 항목에 마우스를 올리면 세부 내용이 보입니다.</div>
+    </div>
+    <details class="pn">
+      <summary>대상 목록 <small id="ovSiteCount"></small></summary>
+      <input id="ovSiteQ" type="search" placeholder="단지명·시군구 검색" style="margin:8px 0">
+      <div class="mini"><table><thead><tr><th>단지</th><th>시군구</th><th>측정</th><th>검사지</th></tr></thead><tbody id="ovSites"></tbody></table></div>
+    </details>
+    <details class="pn">
+      <summary>시군구별 포함 데이터 <small>대상 단지 기준</small></summary>
+      <div class="mini"><table><thead><tr><th>시군구</th><th class="n">대상</th><th class="n">측정</th><th class="n">음영</th><th class="n">취약</th></tr></thead><tbody id="ovDist"></tbody></table></div>
+    </details>
+  </section>
+  <div class="maprow">
   <div class="mapbox">
     <div id="map"></div>
     <!-- 날짜를 골랐거나 최저 RSRP 칸으로 이동한 상태에서만 보이는 "전체 보기로 돌아가기" 버튼 -->
@@ -188,6 +250,7 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
     <div class="sidehead"><h2>날짜별 현황</h2><button id="allDays">전체 보기</button></div>
     <ul id="days"></ul>
   </aside>
+  </div>
 </div>
 
 <!-- 메뉴: 상세 데이터 -->
@@ -207,6 +270,91 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
   </table></div>
   <div id="info" class="hidden"></div>
 </div>
+
+<!-- 메뉴: 현장측정 (앱에서 입력한 시설별 3사 측정 기록) -->
+<div id="fieldView" class="hidden" style="flex:1;min-height:0;display:flex;flex-direction:column;padding:12px 16px;gap:10px">
+  <div class="filters">
+    <label>판정<select id="gFilter"><option value="">전체</option><option value="shadow">음영</option><option value="weak">취약</option><option value="good">양호</option><option value="pending">미측정</option></select></label>
+    <label class="grow">검색 (단지명·주소·메모)<input id="gQ" type="search"></label>
+    <label style="min-width:auto;flex-direction:row;align-items:center;gap:6px"><input id="gMap" type="checkbox" checked style="width:auto;margin:0"> 지도 현황에 표시</label>
+  </div>
+  <div style="overflow:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:12px">
+    <div class="gstats" id="gStats"></div>
+    <div class="status" id="gCarrier"></div>
+    <div class="status" id="gDistrict"></div>
+    <div class="status" id="gCount"></div>
+    <div id="gCards" class="gcards"></div>
+  </div>
+</div>
+<style>
+.gstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+/* 현황 탭 타일과 같은 모양 */
+.gstat{border:1px solid var(--line);border-left:4px solid var(--c,var(--sub));border-radius:8px;background:color-mix(in srgb,var(--c,var(--sub)) 9%,var(--panel));
+  padding:6px 10px;text-align:left;font:inherit;cursor:pointer;color:var(--ink);line-height:1.25}
+.gstat b{display:block;font-size:22px;color:var(--c,var(--ink))}.gstat span{font-size:12px}.gstat small{font-size:10.5px;color:var(--sub)}
+.gstat.bad{--c:var(--bad)}.gstat.ok{--c:var(--ok)}.gstat.warn{--c:var(--warn)}.gstat.none{--c:var(--sub)}
+.gstat.on{outline:2px solid var(--c);outline-offset:1px}
+.gcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px}
+.gcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.gcard h3{margin:0;font-size:15px;display:flex;gap:8px;align-items:center;justify-content:space-between}
+.gcard .meta{font-size:12px;color:var(--sub)}
+.gcar{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.gcar div{background:var(--bg);border-radius:8px;padding:6px 8px;font-size:12px}
+.gcar div b{display:block;font-size:18px}
+.gcar div.bad b{color:var(--bad)}.gcar div.warn b{color:var(--warn)}.gcar div.ok b{color:var(--ok)}
+.gcard .acts{display:flex;gap:6px;flex-wrap:wrap}
+</style>
+
+<!-- 메뉴: 측정대상 (엑셀로 대상 등록 · 담당자 배정 · 앱에 내려보냄) -->
+<div id="targetsView" class="hidden" style="flex:1;min-height:0;overflow:auto;padding:12px 16px;display:flex;flex-direction:column;gap:10px">
+  <section class="pn adm">
+    <h2>담당자 <small>앱 현장측정 탭에 이름 + 코드를 입력하면 배정된 단지만 보입니다</small></h2>
+    <div class="filters">
+      <label>이름<input id="wName" maxlength="20" placeholder="예: 김OO"></label>
+      <label>코드(4자리)<input id="wCode" maxlength="8" inputmode="numeric" placeholder="자동 생성 가능"></label>
+      <button id="wGen" type="button">코드 만들기</button>
+      <button id="wAdd" type="button">담당자 추가</button>
+    </div>
+    <div class="mini"><table><thead><tr><th>이름</th><th>코드</th><th class="n">배정 단지</th><th></th></tr></thead><tbody id="wBody"></tbody></table></div>
+  </section>
+  <section class="pn adm">
+    <h2>측정대상 추가 <small>엑셀(.xlsx/.xls)·CSV 파일 또는 붙여넣기 · 열: 단지명, 시군구, 주소, 담당자(선택)</small></h2>
+    <div class="filters">
+      <label class="grow">엑셀·CSV 파일<input id="tFile" type="file" accept=".xlsx,.xls,.csv,.txt"></label>
+      <button id="tTemplate" type="button" title="단지명·시군구·주소·담당자 열이 있는 빈 양식(예시 포함)을 내려받습니다">엑셀 양식 다운로드</button>
+    </div>
+    <label>또는 붙여넣기 (한 줄에 한 곳: 단지명, 시군구, 주소, 담당자)
+      <textarea id="tPaste" rows="3" style="width:100%;margin-top:4px" placeholder="공덕한화꿈에그린, 마포구, 서울특별시 마포구 마포대로10길 22, 김OO"></textarea></label>
+    <div class="filters" style="margin-top:8px"><button id="tAddPaste" type="button">붙여넣은 목록 추가</button><span class="status" id="tMsg"></span></div>
+  </section>
+  <section class="pn">
+    <h2>측정대상 목록 <small id="tCount"></small></h2>
+    <div class="filters">
+      <label>담당자<select id="tWorker"><option value="">전체</option></select></label>
+      <label>상태<select id="tState"><option value="">전체</option><option value="todo">미완료</option><option value="done">완료</option></select></label>
+      <label class="grow">검색 (단지명·주소·시군구)<input id="tQ" type="search"></label>
+      <button id="tDelSel" class="adm danger" disabled>선택 삭제 (0)</button>
+      <button id="tDelAll" class="adm danger">등록 목록 전체 비우기</button>
+    </div>
+    <div class="mini" style="max-height:none"><table><thead><tr><th class="adm"><input type="checkbox" id="tChkAll" title="화면에 보이는 등록 대상 전체 선택" style="width:auto;margin:0"></th><th>단지</th><th>시군구</th><th>주소</th><th>담당자</th><th>상태</th><th class="adm"></th></tr></thead><tbody id="tBody"></tbody></table></div>
+  </section>
+</div>
+
+<dialog id="photoDlg" style="width:min(900px,calc(100% - 24px))">
+  <h2 id="pTitle"></h2>
+  <p><span id="pState" class="tag none"></span> <span id="pMsg"></span></p>
+  <p id="pCap" style="font-size:14px;color:var(--ink);margin-top:6px"></p>
+  <canvas id="pCanvas" style="max-width:100%;max-height:68vh;margin-top:8px;border:1px solid var(--line);touch-action:none;cursor:crosshair"></canvas>
+  <div class="btns" style="flex-wrap:wrap;justify-content:space-between">
+    <span><button id="pPrev">◀ 이전</button> <button id="pNext">다음 ▶</button></span>
+    <span>
+      <button id="pUndo" class="hidden">마지막 가림 취소</button>
+      <button id="pEdit">가림 편집</button>
+      <button id="pSave" class="pri hidden">가림 저장</button>
+      <button id="pClose">닫기</button>
+    </span>
+  </div>
+</dialog>
 
 <!-- 메뉴: 관리 (관리자 전용) -->
 <div id="adminView" class="hidden">
@@ -241,11 +389,27 @@ dialog .btns .pri{background:var(--brand);color:#fff;border:0}
   </section>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* 지도 라이브러리(Leaflet) 불러오기: 이 파일 옆 leaflet 폴더 → unpkg → jsdelivr → cdnjs 순서로 시도한다.
+   인터넷이 막힌 곳에서도 leaflet 폴더만 같이 두면 동작한다. 모두 실패하면 window.__leafletErr 에 사유가 남는다. */
+window.__leafletReady = (async () => {
+  const bases = ["./leaflet/", "https://unpkg.com/leaflet@1.9.4/dist/", "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/", "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/"];
+  const load = (tag, attrs) => new Promise((ok, no) => { const e = document.createElement(tag); Object.assign(e, attrs); e.onload = ok; e.onerror = () => { e.remove(); no(); }; document.head.appendChild(e); });
+  for (const b of bases) {
+    try {
+      await load("link", { rel: "stylesheet", href: b + "leaflet.css" });
+      await load("script", { src: b + "leaflet.js" });
+      if (typeof L !== "undefined") { window.__leafletFrom = b; return true; }
+    } catch {}
+  }
+  window.__leafletErr = "지도 라이브러리를 불러오지 못했습니다 (leaflet 폴더 없음 + 인터넷 차단)";
+  return false;
+})();
+</script>
 <script type="module">
 const $ = id => document.getElementById(id);
 // 제목 옆에 지금 실제로 쓰고 있는 지도 이름을 표시한다 (카카오맵을 못 불러와 OpenStreetMap으로 바뀌면 그대로 보인다)
-const showMapName = () => { $("ver").textContent = M ? (M.kind === "kakao" ? "카카오맵" : M.kind === "osm" ? "OpenStreetMap" : "") : ""; };
+const showMapName = () => { $("ver").textContent = M ? (M.kind === "kakao" ? "카카오맵" : M.kind === "osm" ? (M.label ? M.label() : "OpenStreetMap") : "") : ""; };
 let isAdmin = false, viaProxy = false, M = null, mapNote = "", fitted = false, timer = null;
 
 /* ---------- 데이터 형식 ----------
@@ -349,7 +513,8 @@ const gh = (path, opt = {}) => fetch(`https://api.github.com/repos/${REPO.owner}
 const cpath = p => p.split("/").map(encodeURIComponent).join("/");
 
 /* 앱이 올리는 구조: {폴더}/{기기ID}/{yyyy-MM-dd}.json 을 모두 읽어 합친다. */
-const MAX_FILES = 120;
+// 음영·취약 단지는 누적 집계라 오래된 날짜가 빠지면 안 된다. 파일은 sha 캐시로 한 번만 받으므로 한도를 넉넉히 둔다.
+const MAX_FILES = 600;
 async function fetchRecords() {
   const tr = await gh(`git/trees/${encodeURIComponent(REPO.branch)}?recursive=1`);
   if (!tr.ok) throw new Error("HTTP " + tr.status);
@@ -362,21 +527,72 @@ async function fetchRecords() {
   // 파일 목록(트리)에는 파일마다 내용 해시(sha)가 있다. 해시가 그대로인 파일은 다시 받지 않고
   // 캐시를 쓰므로, 변화가 없으면 새로고침 1번에 API 호출이 1번뿐이다 (토큰 한도 시간당 5000회 보호).
   const signature = files.map(f => f.path + ":" + f.sha).join("|");
-  await Promise.all(files.map(async f => {
-    if (fileCache.get(f.path)?.sha === f.sha) return;
-    const res = await gh(`contents/${cpath(f.path)}?ref=${encodeURIComponent(REPO.branch)}`, { headers: { Accept: "application/vnd.github.raw+json" } });
-    if (!res.ok) { fileCache.delete(f.path); return; }
-    try { const j = await res.json(); fileCache.set(f.path, { sha: f.sha, recs: Array.isArray(j) ? j : (j.records || []) }); }
-    catch { fileCache.delete(f.path); }
-  }));
+  let failed = await readFiles(files);
   for (const p of fileCache.keys()) if (!files.some(f => f.path === p)) fileCache.delete(p); // 삭제된 파일 정리
   const seen = new Set(), list = [];
   for (const f of files) for (const r of fileCache.get(f.path)?.recs || []) {
     const k = (r.deviceId || "") + "|" + r.timestamp;
     if (!seen.has(k)) { seen.add(k); list.push(r); }
   }
-  return { list, files: files.length, signature };
+  // 현장측정 기록: 앱이 field/{기기ID}/{yyyy-MM-dd}.json 으로 올린다 (신호 기록 data/ 와 분리)
+  const ffiles = tree.tree
+    .filter(t => t.type === "blob" && t.path.startsWith(FIELD_PATH + "/") && /\.json$/i.test(t.path))
+    .sort((a, b) => b.path.split("/").pop().localeCompare(a.path.split("/").pop()))
+    .slice(0, MAX_FILES);
+  failed += await readFiles(ffiles);
+  const fseen = new Set(), field = [];
+  for (const f of ffiles) for (const r of fileCache.get(f.path)?.recs || []) {
+    const k = (r.deviceId || "") + "|" + (r.id || r.timestamp);
+    if (!fseen.has(k)) { fseen.add(k); field.push(r); }
+  }
+  // failed 를 서명에 넣어, 못 받은 파일이 다음 새로고침에서 받아지면 화면이 다시 그려지게 한다
+  return { list, field, failed, files: files.length, signature: signature + "#" + ffiles.map(f => f.path + ":" + f.sha).join("|") + "#f" + failed };
 }
+
+/** 파일 목록을 읽어 fileCache 에 넣는다. 한꺼번에 수백 건을 요청하면 GitHub 이 일부를 거부(403/429)해 기록이 조용히 빠지므로
+ *  동시에 6개씩만 요청하고, 실패한 파일은 한 번 더 시도한다. 끝내 못 받은 파일 수를 돌려준다. */
+async function readFiles(list) {
+  const todo = list.filter(f => fileCache.get(f.path)?.sha !== f.sha);
+  let failed = 0, i = 0;
+  const one = async f => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await gh(`contents/${cpath(f.path)}?ref=${encodeURIComponent(REPO.branch)}`, { headers: { Accept: "application/vnd.github.raw+json" } });
+        if (res.status === 401) throw new Error("HTTP 401");
+        if (res.ok) { const j = await res.json(); fileCache.set(f.path, { sha: f.sha, recs: Array.isArray(j) ? j : (j.records || []) }); return; }
+        await new Promise(r => setTimeout(r, 800)); // 제한에 걸렸을 수 있으니 잠깐 쉬고 재시도
+      } catch (e) { if (/HTTP 401/.test(e.message)) throw e; }
+    }
+    fileCache.delete(f.path); failed++;
+  };
+  await Promise.all(Array.from({ length: Math.min(6, todo.length) }, async () => { while (i < todo.length) await one(todo[i++]); }));
+  return failed;
+}
+const FIELD_PATH = "field";
+const CARRIERS = ["SKT", "KT", "LGU+"];
+/** 현장측정 한 건 → 화면용. 판정 기준은 진단 도구와 같다: RSRP ≤ -115 음영, ≤ -100 취약. */
+function normalizeField(raw, i) {
+  const cv = {};
+  for (const c of CARRIERS) {
+    const x = (raw.carriers || {})[c] || {};
+    cv[c] = { status: x.status || "pending", rsrp: num(x.rsrp), sinr: num(x.sinr), note: x.note || "" };
+  }
+  const meas = CARRIERS.filter(c => cv[c].status === "measured" && cv[c].rsrp !== null);
+  const worst = meas.length ? Math.min(...meas.map(c => cv[c].rsrp)) : null;
+  const grade = worst !== null && worst <= -115 ? "shadow" : worst !== null && worst <= -100 ? "weak"
+    : CARRIERS.some(c => cv[c].status === "pending") ? "pending" : "good";
+  return {
+    kind: "field", id: "f-" + (raw.id ?? i), rawId: raw.id ?? "", worker: raw.worker || "", redacted: Array.isArray(raw.redacted) ? raw.redacted : [],
+    deviceId: raw.deviceId || "", ts: raw.timestamp ?? raw.ts,
+    lat: num(raw.latitude ?? raw.lat), lng: num(raw.longitude ?? raw.lng),
+    name: raw.facilityName || raw.name || "(이름 없음)", district: raw.district || "", address: raw.address || "",
+    floor: raw.floor || "", zone: raw.zone || "", memo: raw.memo || "", photos: Array.isArray(raw.photos) ? raw.photos : [],
+    photoCaptions: Array.isArray(raw.photoCaptions) ? raw.photoCaptions : [],
+    cv, worst, grade
+  };
+}
+const GRADE = { shadow: ["음영", "bad"], weak: ["취약", "warn"], good: ["양호", "ok"], pending: ["미측정", "none"] };
+let FIELD = [];
 const fileCache = new Map(); // path -> { sha, recs }
 let lastSignature = "";
 
@@ -386,12 +602,16 @@ async function load(manual = false) {
   if (!manual && (document.hidden || $("info").contains(document.activeElement))) return; // 숨겨진 탭/입력 중에는 쉰다
   try {
     const r = await fetchRecords();
-    const stamp = `${r.files}개 파일 · ${r.list.length}건 · ${new Date().toLocaleTimeString("ko-KR")}`;
+    const stamp = `${r.files}개 파일 · ${r.list.length}건 · ${new Date().toLocaleTimeString("ko-KR")}` +
+      (r.failed ? ` · ⚠ ${r.failed}개 파일 못 받음(GitHub 요청 제한일 수 있음, 새로고침하면 다시 시도)` : "");
     lastStamp = stamp;
     $("srcStatus").textContent = stamp + mapNote;
     if (!manual && r.signature === lastSignature) return; // 바뀐 것이 없으면 화면은 그대로 둔다 (지도 위치·선택 유지)
     const first = lastSignature === "";
     lastSignature = r.signature;
+    await loadInspected();
+    await loadTargets();
+    FIELD = r.field.map(normalizeField).filter(x => x.ts != null);
     DATA = r.list.map(normalize).filter(x => x.ts != null);
     if (manual || first) fitted = false;
     render(DATA);
@@ -419,6 +639,10 @@ function setView(v) {
   $("wrap").classList.toggle("hidden", v !== "map");
   $("detail").classList.toggle("hidden", v !== "detail");
   $("adminView").classList.toggle("hidden", v !== "admin");
+  $("fieldView").classList.toggle("hidden", v !== "field");
+  if (v === "field") drawField();
+  $("targetsView").classList.toggle("hidden", v !== "targets");
+  if (v === "targets") drawTargets();
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
   if (v === "map") setTimeout(() => M && M.resize(), 0);
 }
@@ -448,7 +672,8 @@ async function initMap() {
   } else {
     mapNote = " · 카카오 키가 없어 OpenStreetMap 표시 중";
   }
-  if (typeof L === "undefined") { mapNote = " · 지도 라이브러리를 불러오지 못했습니다"; M = makeNoMap(); return; }
+  await window.__leafletReady;
+  if (typeof L === "undefined") { mapNote = " · " + (window.__leafletErr || "지도 라이브러리를 불러오지 못했습니다"); M = makeNoMap(); return; }
   M = makeLeafletMap();
   M.init($("map"));
 }
@@ -511,13 +736,35 @@ function makeKakaoMap() {
 }
 
 function makeLeafletMap() {
-  let map, layer;
+  let map, layer, tileName = "OpenStreetMap";
   const byId = new Map();
   return {
     kind: "osm",
+    label: () => tileName,
     init(el) {
       map = L.map(el).setView([36.5, 127.8], 7);
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "© OpenStreetMap" }).addTo(map);
+      // 무료 타일 서버를 차례로 시도한다: 한 서버에서 타일이 연속으로 실패하면 다음 서버로 바꾼다.
+      // OpenStreetMap 은 Referer 가 없으면(파일로 직접 연 페이지) "403 Access blocked" 로 막으므로 마지막 순서다.
+      const TILES = [
+        ["Esri", "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", "© Esri"],
+        ["OpenStreetMap", "https://tile.openstreetmap.org/{z}/{x}/{y}.png", "© OpenStreetMap"]];
+      let ti = 0, fails = 0, okc = 0, layerT = null;
+      const useTile = () => {
+        if (layerT) map.removeLayer(layerT);
+        const [name, url, attr] = TILES[ti];
+        layerT = L.tileLayer(url, { maxZoom: 18, attribution: attr, subdomains: "abcd" }).addTo(map);
+        layerT.bringToBack(); fails = 0; okc = 0;
+        layerT.on("tileload", () => { okc++; });
+        layerT.on("tileerror", () => {
+          if (okc === 0 && ++fails >= 3) {
+            if (ti < TILES.length - 1) { ti++; useTile(); }
+            else $("srcStatus").textContent += " · 지도 타일을 받지 못해 점만 표시합니다 (인터넷/방화벽 확인)";
+          }
+        });
+        tileName = name; mapNote = ` · ${name} 지도 표시 중`;
+        if (typeof showMapName === "function" && M) showMapName();
+      };
+      useTile();
       layer = L.layerGroup().addTo(map);
     },
     ready() { return Promise.resolve(true); },
@@ -687,9 +934,20 @@ const kakaoCall = (fn) => new Promise((resolve, reject) =>
     else reject(new Error("카카오 주소 변환 오류 (" + status + ")"));
   }));
 
+/* 카카오가 거부하면(키·사이트 도메인 미등록, 카카오맵 사용 설정 꺼짐, 파일로 직접 연 페이지 등)
+   그 세션에서는 카카오를 건너뛰고 무료 주소 변환(Nominatim)으로 계속한다. */
+let kakaoFailed = "";
 async function toAddress(lat, lng, nth) {
   const key = kakaoKey();
-  if (!key) return nominatim(lat, lng, nth);
+  if (!key || kakaoFailed) return nominatim(lat, lng, nth);
+  try { return await toAddressKakao(key, lat, lng); }
+  catch (e) {
+    kakaoFailed = e.message;
+    const note = $("gMsg"); if (note) note.textContent = "카카오 주소 변환이 거부되어(키·사이트 도메인 등록 확인) 무료 주소 변환으로 이어서 처리합니다. 속도가 느립니다(초당 1건).";
+    return nominatim(lat, lng, 1);
+  }
+}
+async function toAddressKakao(key, lat, lng) {
   await loadKakao(key);
   const geo = new kakao.maps.services.Geocoder();
   const res = await kakaoCall(cb => geo.coord2Address(lng, lat, cb));
@@ -725,7 +983,115 @@ async function deleteRecords(rows) {
   } catch (e) { alert("삭제 실패: " + e.message); }
 }
 
+function fieldPopup(r) {
+  const el = document.createElement("div"); el.className = "pop";
+  const line = (k, val) => { const d = document.createElement("div"); d.className = "row"; d.textContent = k + ": " + val; el.appendChild(d); };
+  const t = document.createElement("b"); t.textContent = "[현장측정] " + r.name + " · " + GRADE[r.grade][0]; el.appendChild(t);
+  line("시각", fmt(toDate(r.ts)));
+  for (const c of CARRIERS) {
+    const x = r.cv[c];
+    line(c, x.status === "measured" ? "RSRP " + v(x.rsrp) + (x.sinr !== null ? " / SINR " + x.sinr : "") : x.status === "ok" ? "이상 없음" : "미측정");
+  }
+  if (r.floor || r.zone) line("위치", [r.floor, r.zone].filter(Boolean).join(" "));
+  if (r.address) line("주소", r.address);
+  if (r.memo) line("메모", r.memo);
+  if (r.photos.length) {
+    const a = document.createElement("div"); a.className = "acts";
+    const b = document.createElement("button"); b.textContent = `사진 ${r.photos.length}장`;
+    b.onclick = () => openPhotos(r, 0);
+    a.appendChild(b); el.appendChild(a);
+  }
+  return el;
+}
+
+/* ---------- 현장측정 사진: 보기 + 가림 편집(관리자) ----------
+ 가림 저장 = 가린 사진으로 같은 경로를 덮어쓰고 기록의 redacted 목록에 경로를 추가한다.
+ 주의: GitHub 은 이전 버전을 기록(커밋 이력)에 남기므로, 원본까지 완전히 없애려면 저장소는 비공개여야 한다. */
+const photoUrls = new Map();
+async function photoBlobUrl(path) {
+  if (photoUrls.has(path)) return photoUrls.get(path);
+  const res = await gh(`contents/${cpath(path)}?ref=${encodeURIComponent(REPO.branch)}`, { headers: { Accept: "application/vnd.github.raw+json" } });
+  if (!res.ok) throw new Error("사진을 불러오지 못했습니다 (" + res.status + ")");
+  const u = URL.createObjectURL(await res.blob());
+  photoUrls.set(path, u); return u;
+}
+let pRec = null, pIdx = 0, pRects = [], pDrag = null, pImg = null, pEdit = false;
+const pCanvas = $("pCanvas"), pCtx = pCanvas.getContext("2d");
+function paintP() {
+  if (!pImg) return;
+  pCtx.drawImage(pImg, 0, 0);
+  pCtx.fillStyle = "#000"; pRects.forEach(r => pCtx.fillRect(r.x, r.y, r.w, r.h));
+  if (pDrag) { pCtx.strokeStyle = "#e2685b"; pCtx.lineWidth = Math.max(2, pCanvas.width / 300); pCtx.strokeRect(pDrag.x, pDrag.y, pDrag.w, pDrag.h); }
+}
+async function openPhotos(r, i) {
+  pRec = r; pIdx = i; pRects = []; pDrag = null; pEdit = false; pImg = null;
+  const path = r.photos[i], done = r.redacted.includes(path);
+  $("pTitle").textContent = `${r.name} · 사진 ${i + 1}/${r.photos.length}`;
+  $("pState").textContent = done ? "가림 완료" : "미가림 (전화번호·차량번호 확인)";
+  $("pState").className = "tag " + (done ? "ok" : "warn");
+  $("pCap").textContent = r.photoCaptions[i] || "(설명 없음)";
+  $("pPrev").disabled = i === 0; $("pNext").disabled = i >= r.photos.length - 1;
+  $("pEdit").textContent = "가림 편집"; $("pUndo").classList.add("hidden"); $("pSave").classList.add("hidden");
+  $("pMsg").textContent = "불러오는 중...";
+  if (!$("photoDlg").open) $("photoDlg").showModal();
+  try {
+    const url = await photoBlobUrl(path);
+    pImg = new Image();
+    pImg.onload = () => { pCanvas.width = pImg.naturalWidth; pCanvas.height = pImg.naturalHeight; paintP(); $("pMsg").textContent = ""; };
+    pImg.src = url;
+  } catch (e) { $("pMsg").textContent = e.message; }
+}
+const pPoint = e => { const b = pCanvas.getBoundingClientRect(); return { x: (e.clientX - b.left) * pCanvas.width / b.width, y: (e.clientY - b.top) * pCanvas.height / b.height }; };
+let pStart = null;
+pCanvas.addEventListener("pointerdown", e => { if (!pEdit) return; pCanvas.setPointerCapture(e.pointerId); pStart = pPoint(e); });
+pCanvas.addEventListener("pointermove", e => {
+  if (!pStart) return; const p = pPoint(e);
+  pDrag = { x: Math.min(pStart.x, p.x), y: Math.min(pStart.y, p.y), w: Math.abs(p.x - pStart.x), h: Math.abs(p.y - pStart.y) }; paintP();
+});
+pCanvas.addEventListener("pointerup", () => { if (pDrag && pDrag.w > 4 && pDrag.h > 4) pRects.push(pDrag); pDrag = null; pStart = null; paintP(); });
+$("pEdit").onclick = () => {
+  if (!isAdmin) { $("pMsg").textContent = "가림 편집은 쓰기 권한이 있는 토큰으로 접속해야 합니다."; return; }
+  pEdit = !pEdit;
+  $("pEdit").textContent = pEdit ? "편집 끝내기" : "가림 편집";
+  $("pUndo").classList.toggle("hidden", !pEdit); $("pSave").classList.toggle("hidden", !pEdit);
+  $("pMsg").textContent = pEdit ? "전화번호·차량번호 위를 드래그하면 검은 사각형으로 가립니다." : "";
+};
+$("pUndo").onclick = () => { pRects.pop(); paintP(); };
+$("pPrev").onclick = () => openPhotos(pRec, pIdx - 1);
+$("pNext").onclick = () => openPhotos(pRec, pIdx + 1);
+$("pClose").onclick = () => $("photoDlg").close();
+$("pSave").onclick = async () => {
+  if (!pRects.length && !confirm("가린 곳이 없습니다. 가릴 내용이 없는 사진으로 '가림 완료' 처리할까요?")) return;
+  const btn = $("pSave"); btn.disabled = true; $("pMsg").textContent = "저장 중...";
+  try {
+    const path = pRec.photos[pIdx];
+    paintP();
+    const blob = await new Promise(res => pCanvas.toBlob(res, "image/jpeg", 0.85));
+    const bytes = new Uint8Array(await blob.arrayBuffer()); let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    // 1) 사진 덮어쓰기 (기존 sha 필요)
+    const meta = await gh(`contents/${cpath(path)}?ref=${encodeURIComponent(REPO.branch)}`);
+    if (!meta.ok) throw new Error("사진 정보 조회 실패 (" + meta.status + ")");
+    const put = await gh(`contents/${cpath(path)}`, { method: "PUT", body: JSON.stringify({ message: "가림 처리 " + path.split("/").pop(), branch: REPO.branch, sha: (await meta.json()).sha, content: btoa(s) }) });
+    if (!put.ok) throw new Error("사진 저장 실패 (" + put.status + ")");
+    // 2) 기록의 redacted 목록에 추가
+    const file = `${FIELD_PATH}/${pRec.deviceId}/${kstDay(pRec.ts)}.json`;
+    await retry(async () => {
+      const f = await readFile(file); if (!f) throw new Error("기록 파일을 찾을 수 없습니다");
+      const it = f.data.find(x => String(x.id) === String(pRec.rawId)); if (!it) throw new Error("기록을 찾을 수 없습니다");
+      it.redacted = [...new Set([...(it.redacted || []), path])];
+      await writeFile(file, f.data, f.sha, "가림 완료 " + pRec.name);
+    });
+    URL.revokeObjectURL(photoUrls.get(path)); photoUrls.delete(path);
+    pRec.redacted.push(path);
+    lastSignature = ""; // 다음 새로고침에서 화면을 다시 그린다
+    pEdit = false; await openPhotos(pRec, pIdx);
+    $("pMsg").textContent = "가림 처리를 저장했습니다.";
+  } catch (e) { $("pMsg").textContent = "저장 실패: " + e.message; }
+  finally { btn.disabled = false; }
+};
+
 function popup(r) {
+  if (r.kind === "field") return fieldPopup(r);
   const el = document.createElement("div"); el.className = "pop";
   const line = (k, val) => { const d = document.createElement("div"); d.className = "row"; d.textContent = k + ": " + val; el.appendChild(d); };
   const t = document.createElement("b"); t.textContent = "RSRP " + v(r.rsrp) + " dBm"; el.appendChild(t);
@@ -773,6 +1139,8 @@ function render(list) {
   draw();
   fillFilters();
   drawTable();
+  drawField();
+  drawOverview(); // 지도가 아직 없어도 현황 카드는 그린다
 }
 
 function draw() {
@@ -842,14 +1210,468 @@ function draw() {
   if (!M) return; // 지도가 아직 준비되지 않았으면 목록만 그린다 (준비 후 load 가 다시 그림)
   M.clear();
   const pts = [], css = getComputedStyle(document.documentElement);
-  for (const r of shown) {
+  // 현황 카드로 판정을 고르면 RSRP 점도 같은 기준의 지점만 남긴다 (대기는 현장측정에만 있는 개념이라 신호 점은 숨김)
+  const sigG = ovFilter ? new Map([...signalPlaces()].map(([k, o]) => [k, o.grade])) : null;
+  const mapShown = !ovFilter ? shown : shown.filter(r => r.rsrp !== null && r.lat !== null && sigGradeOf(r.rsrp) === ovFilter && sigG.has(sigKey(r))
+    ? sigG.get(sigKey(r)) === ovFilter : false);
+  for (const r of mapShown) {
     if (r.lat === null || r.lng === null) continue;
     const c = css.getPropertyValue("--" + (cls(r) === "none" ? "warn" : cls(r))).trim();
     M.add(r, c);
     pts.push([r.lat, r.lng]);
   }
+  drawOverview();
+  if ($("gMap").checked) { // 현장측정 기록도 같은 지도에 올린다 (색은 3사 중 가장 나쁜 판정)
+    const sg = siteGrades();
+    for (const r of FIELD) {
+      if (r.lat === null || r.lng === null) continue;
+      if (ovFilter && sg.get(r.name) !== ovFilter) continue; // 현황 카드로 고른 판정의 단지만
+      M.add(r, css.getPropertyValue("--" + GRADE[r.grade][1] ).trim() || "#888");
+      if (!selDay) pts.push([r.lat, r.lng]);
+    }
+  }
   if (pts.length && !fitted) { M.fit(pts); fitted = true; }
 }
+
+/* ---------- 현황 (진단 도구 현황 탭과 같은 구성) ---------- */
+let ovFilter = "";
+/** 통신사 이름 표기("KT", "SKT", "LG U+" 등)를 SKT / KT / LGU+ 로 통일. 모르면 "". */
+function carrierOfOp(s) {
+  const t = String(s || "").toUpperCase().replace(/[\s+]/g, "");
+  return t.includes("SK") ? "SKT" : t.includes("LG") ? "LGU+" : t.includes("KT") ? "KT" : "";
+}
+const GR = { shadow: 3, weak: 2, pending: 1, good: 0 };
+/** 단지 이름 → 그 단지의 판정(기록 중 가장 나쁜 것) */
+function siteGrades() {
+  const m = new Map();
+  for (const r of FIELD) if (!m.has(r.name) || GR[r.grade] > GR[m.get(r.name)]) m.set(r.name, r.grade);
+  return m;
+}
+/* 진단 도구에 들어 있던 대상 단지(시범 권역 확인분). 현장측정 기록은 단지명으로 대조해 측정 여부를 붙인다. */
+const SEED_SITES = [
+  ["공덕한화꿈에그린", "마포구"], ["마곡수명산파크5단지", "강서구"], ["상암월드컵파크10단지", "마포구"], ["상암월드컵8단지", "마포구"],
+  ["상암월드컵파크9단지", "마포구"], ["상암 월드컵파크11단지아파트", "마포구"], ["북한산 두산 위브", "서대문구"], ["신월수명산SK-VIEW", "양천구"],
+  ["가람마을11단지동문굿모닝힐", "파주시"], ["마곡엠밸리8단지", "강서구"], ["신구아파트", "강북구"], ["수유현대아파트101동", "강북구"]];
+const normName = s => String(s).toLowerCase().replace(/[\s()·,.\-]/g, "");
+const sameSite = (a, b) => { const x = normName(a), y = normName(b); return x.length >= 3 && y.length >= 3 && (x === y || x.includes(y) || y.includes(x)); };
+/** 대상 단지 목록 = 진단 도구 대상 단지 + 현장에서 새로 입력한 단지, 각각의 판정(없으면 null) */
+function targetSites() {
+  // 측정대상 탭에 등록한 목록이 있으면 그것을 기준으로, 없으면 진단 도구의 기본 단지를 쓴다
+  const sg = siteGrades(), list = TARGETS.targets.length
+    ? TARGETS.targets.map(t => ({ name: t.name, district: t.district || "미상", address: t.address || "", assignee: t.assignee || "", grade: null, rec: null }))
+    : SEED_SITES.map(([name, district]) => ({ name, district, address: "", assignee: "", grade: null, rec: null }));
+  for (const [name, grade] of sg) {
+    const rec = FIELD.find(r => r.name === name);
+    const hit = list.find(s => sameSite(s.name, name));
+    if (hit) { hit.grade = grade; hit.rec = rec; } else list.push({ name, district: rec.district || "미상", grade, rec });
+  }
+  // 검사 완료 = 앱에서 3사를 모두 입력했거나(자동), 검사지에서 확인해 버튼으로 완료 처리한 단지(수동)
+  for (const s of list) {
+    s.appDone = FIELD.some(r => sameSite(r.name, s.name) && CARRIERS.every(c => r.cv[c].status !== "pending"));
+    s.manualDone = !!INSPECTED[s.name];
+  }
+  return list;
+}
+
+/* ---------- 검사지 기준 "측정 완료" 수동 체크 ----------
+ 저장소의 status/inspected.json ({단지명: {ts}}) 에 저장한다. 읽기는 누구나, 쓰기는 쓰기 권한 토큰(관리자)만. */
+let INSPECTED = {};
+const INSPECT_FILE = "status/inspected.json";
+async function loadInspected() {
+  try { const f = await readFile(INSPECT_FILE); INSPECTED = (f && f.data && typeof f.data === "object" && !Array.isArray(f.data)) ? f.data : {}; }
+  catch { /* 파일이 없거나 읽기 실패: 빈 상태로 둔다 */ }
+}
+async function setInspected(name, on) {
+  if (!isAdmin) { alert("쓰기 권한이 있는 토큰으로 접속해야 완료 처리를 할 수 있습니다."); return; }
+  try {
+    let saved;
+    await retry(async () => {
+      const f = await readFile(INSPECT_FILE), data = (f && f.data && !Array.isArray(f.data)) ? f.data : {};
+      if (on) data[name] = { ts: Date.now() }; else delete data[name];
+      await writeFile(INSPECT_FILE, data, f ? f.sha : undefined, (on ? "검사 완료 " : "검사 완료 취소 ") + name);
+      saved = data;
+    });
+    INSPECTED = saved; drawOverview();
+  } catch (e) { alert("저장 실패: " + e.message); }
+}
+/* 신호 기록(앱이 자동으로 쌓은 RSRP)도 같은 기준(≤ -115 음영, ≤ -100 취약)으로 "지점"별 판정을 낸다.
+   지점 = 같은 주소(없으면 약 100m 격자). 현장측정 기록 150m 안의 지점은 같은 곳으로 보고 세지 않는다(이중 집계 방지). */
+const sigKey = r => r.address || (r.lat.toFixed(3) + "," + r.lng.toFixed(3));
+const sigGradeOf = x => x <= -115 ? "shadow" : x <= -100 ? "weak" : "good";
+function signalPlaces() {
+  const m = new Map(); // key -> { grade, rec }
+  for (const r of DATA) {
+    if (r.rsrp === null || r.lat === null || r.lng === null) continue;
+    const g = sigGradeOf(r.rsrp), k = sigKey(r), o = m.get(k);
+    if (!o) m.set(k, { grade: g, rec: r });
+    else if (GR[g] > GR[o.grade] || (g === o.grade && r.rsrp < o.rec.rsrp)) { o.grade = g; o.rec = r; }
+  }
+  for (const [k, o] of [...m]) if (FIELD.some(f => f.lat !== null && meters(f.lat, f.lng, o.rec.lat, o.rec.lng) <= 150)) m.delete(k);
+  return m;
+}
+function drawOverview() {
+  const sg = siteGrades(), sp = signalPlaces();
+  const vals = [...sg.values()], n = k => vals.filter(x => x === k).length;
+  const ns = k => [...sp.values()].filter(o => o.grade === k).length; // 신호 기록 지점 수
+  // 측정 완료 = 앱에서 3사를 모두 입력한 단지 + 검사지에서 버튼으로 완료 처리한 단지 (대상 목록 기준으로 중복 없이)
+  const tsites = targetSites();
+  const done = tsites.filter(s => s.appDone || s.manualDone).length;
+  const doneManual = tsites.filter(s => s.manualDone && !s.appDone).length;
+  const cards = [
+    ["shadow", "bad", "음영 발굴", n("shadow") + ns("shadow"), `현장 ${n("shadow")} · 신호기록 ${ns("shadow")} (≤ -115)`],
+    ["weak", "warn", "취약", n("weak") + ns("weak"), `현장 ${n("weak")} · 신호기록 ${ns("weak")} (≤ -100)`],
+    ["", "ok", "측정 완료", done, `앱 입력 ${done - doneManual} · 검사지 체크 ${doneManual}`],
+    ["pending", "none", "측정 대기", n("pending"), "일부 통신사 미측정"]];
+  const box = $("ovStats"); box.innerHTML = "";
+  for (const [key, cls, label, num_, sub] of cards) {
+    const b = document.createElement(key ? "button" : "div"); b.className = "tile2 " + cls + (key && ovFilter === key ? " on" : "");
+    b.innerHTML = "<b></b><span></span><em></em>";
+    b.querySelector("b").textContent = num_; b.querySelector("span").textContent = label + " 단지"; b.querySelector("em").textContent = sub;
+    if (key) b.onclick = () => { ovFilter = ovFilter === key ? "" : key; fitted = false; draw(); };
+    box.appendChild(b);
+  }
+  // 통신사별·시군구별 음영 단지는 칩으로 한 줄에 모은다
+  // 통신사 칩: 숫자 = 그 통신사로 측정된 기록 수 = 신호 기록(상세 데이터의 통신사) + 현장측정(그 통신사를 측정/이상없음 입력한 건).
+  // 괄호 안 "음영" = 같은 통신사의 음영 지점·단지 수(≤ -115).
+  const carrOf = carrierOfOp;
+  const total = { SKT: 0, KT: 0, "LGU+": 0 }, shadowN = { SKT: 0, KT: 0, "LGU+": 0 };
+  for (const r of DATA) { const c = carrOf(r.op); if (c) total[c]++; }
+  for (const r of FIELD) for (const c of CARRIERS) if (r.cv[c].status !== "pending") total[c]++;
+  for (const c of CARRIERS) shadowN[c] = new Set(FIELD.filter(r => r.cv[c].status === "measured" && r.cv[c].rsrp <= -115).map(r => r.name)).size;
+  for (const o of sp.values()) { const c = carrOf(o.rec.op); if (c && o.grade === "shadow") shadowN[c]++; }
+  const byD = {};
+  for (const [name, g] of sg) if (g === "shadow") { const d = FIELD.find(r => r.name === name).district || "미상"; byD[d] = (byD[d] || 0) + 1; }
+  const chips = $("ovChips"); chips.innerHTML = "";
+  const chip = (k, val, onclick) => {
+    const s = document.createElement(onclick ? "button" : "span"); s.textContent = k;
+    const b = document.createElement("b"); b.textContent = val; s.appendChild(b);
+    if (onclick) { s.className = "chipbtn"; s.title = "누르면 상세 데이터에서 " + k + " 기록만 봅니다"; s.onclick = onclick; }
+    chips.appendChild(s);
+  };
+  // 통신사 칩을 누르면 상세 데이터가 그 통신사 기록만 보이도록 열린다 (상세 데이터의 통신사 필터를 같이 바꾼다)
+  CARRIERS.forEach(c => chip(c, `${total[c]}  (음영 ${shadowN[c]})`, () => {
+    $("fDay").value = ""; $("fLv").value = ""; $("fQ").value = ""; $("fOp").value = c;
+    drawTable(); setView("detail");
+  }));
+  Object.entries(byD).forEach(([d, c]) => chip(d, c));
+  if (ovFilter) { const s = document.createElement("span"); s.textContent = `지도: ${GRADE[ovFilter][0]} 단지만 표시 중 · 카드를 다시 누르면 전체`; chips.appendChild(s); }
+
+
+  // 대상 목록 (접이식)
+  const sites = tsites, q = $("ovSiteQ").value.trim().toLowerCase();
+  const shown = sites.filter(s => !q || (s.name + " " + s.district).toLowerCase().includes(q));
+  $("ovSiteCount").textContent = `${sites.length}곳 · 측정 ${sites.filter(s => s.grade).length}곳`;
+  const tb = $("ovSites"); tb.innerHTML = "";
+  for (const s of shown) {
+    const tr = document.createElement("tr");
+    const c1 = document.createElement("td"); c1.textContent = s.name;
+    const c2 = document.createElement("td"); c2.textContent = s.district;
+    const c3 = document.createElement("td"), tg = document.createElement("span");
+    const gr = s.grade || null; tg.className = "tag " + (gr ? GRADE[gr][1] : "none"); tg.textContent = gr ? GRADE[gr][0] : "미측정"; c3.appendChild(tg);
+    // 검사지 완료 칸: 앱에서 3사 입력이 끝났으면 자동 완료, 아니면 관리자가 버튼으로 완료 처리/취소
+    const c4 = document.createElement("td");
+    if (s.appDone) c4.textContent = "완료 ✓ (앱)";
+    else {
+      const b = document.createElement("button");
+      b.textContent = s.manualDone ? "완료 ✓ 취소" : "완료 처리";
+      b.style.cssText = "padding:0 8px;font-size:11.5px" + (s.manualDone ? ";color:var(--ok);border-color:var(--ok)" : "");
+      b.onclick = e => { e.stopPropagation(); setInspected(s.name, !s.manualDone); };
+      if (!isAdmin) { b.disabled = true; b.textContent = s.manualDone ? "완료 ✓" : "-"; b.style.border = "0"; }
+      c4.appendChild(b);
+    }
+    tr.append(c1, c2, c3, c4);
+    if (s.rec && s.rec.lat !== null) { tr.onclick = () => { $("gMap").checked = true; draw(); M && M.focus(s.rec); $("map").scrollIntoView({ block: "nearest", behavior: "smooth" }); }; }
+    else tr.style.cursor = "default";
+    tb.appendChild(tr);
+  }
+  // 시군구별 포함 데이터 (접이식)
+  const dd = {};
+  for (const s of sites) { const o = dd[s.district] || (dd[s.district] = { n: 0, m: 0, s: 0, w: 0 }); o.n++; if (s.grade) o.m++; if (s.grade === "shadow") o.s++; if (s.grade === "weak") o.w++; }
+  const db = $("ovDist"); db.innerHTML = "";
+  for (const [d, o] of Object.entries(dd).sort((a, b) => b[1].n - a[1].n)) {
+    const tr = document.createElement("tr");
+    [d, o.n, o.m, o.s, o.w].forEach((x, i) => { const td = document.createElement("td"); if (i) td.className = "n"; td.textContent = x; tr.appendChild(td); });
+    db.appendChild(tr);
+  }
+}
+$("ovSiteQ").addEventListener("input", drawOverview);
+
+/* ---------- 측정대상 · 담당자 ----------
+ 저장소의 status/targets.json = { workers:[{name, code}], targets:[{id, name, district, address, assignee}] }.
+ 이 파일을 웹(쓰기 권한 토큰)이 만들고, 앱은 읽기만 해서 "이름 + 코드"가 맞는 담당자에게 배정된 단지만 보여준다.
+ (주의: 코드는 "내 목록만 보이게 하는 필터"이며 로그인 보안이 아니다 — 앱에 들어 있는 저장소 토큰으로는 파일을 읽을 수 있다.) */
+let TARGETS = { workers: [], targets: [] };
+const TARGET_FILE = "status/targets.json";
+async function loadTargets() {
+  try {
+    const f = await readFile(TARGET_FILE);
+    if (f && f.data && !Array.isArray(f.data)) TARGETS = { workers: f.data.workers || [], targets: f.data.targets || [] };
+  } catch { /* 파일이 없으면 빈 목록 */ }
+}
+/** mut(data) 로 목록을 고쳐 저장한다. 앱/다른 관리자가 동시에 고쳤으면(409/422) 다시 읽어서 한 번 더 시도한다. */
+async function saveTargets(mut) {
+  if (!isAdmin) { alert("쓰기 권한이 있는 토큰으로 접속해야 수정할 수 있습니다."); return false; }
+  try {
+    let saved;
+    await retry(async () => {
+      const f = await readFile(TARGET_FILE);
+      const data = (f && f.data && !Array.isArray(f.data)) ? f.data : { workers: [], targets: [] };
+      data.workers = data.workers || []; data.targets = data.targets || [];
+      mut(data);
+      await writeFile(TARGET_FILE, data, f ? f.sha : undefined, "측정대상 갱신");
+      saved = data;
+    });
+    TARGETS = saved; drawTargets(); drawOverview(); return true;
+  } catch (e) { alert("저장 실패: " + e.message); return false; }
+}
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+/** 엑셀/CSV 행(2차원 배열) → 대상 목록. 첫 줄이 제목(단지명·시군구·주소·담당자)이면 열 위치를 찾고, 아니면 순서대로 읽는다. */
+function rowsToTargets(rows) {
+  const nz = rows.filter(r => r.some(c => String(c ?? "").trim()));
+  if (!nz.length) return [];
+  const H = { name: /^(단지명|시설명|아파트명|건물명|단지|이름)$/, district: /^(시군구|시군|구|지역)$/, address: /^(주소|도로명주소|소재지)$/, assignee: /^(담당자|담당|측정자)$/ };
+  let idx = { name: 0, district: 1, address: 2, assignee: 3 };
+  const first = nz[0].map(c => String(c ?? "").trim());
+  if (first.some(c => Object.values(H).some(re => re.test(c)))) {
+    idx = { name: -1, district: -1, address: -1, assignee: -1 };
+    first.forEach((c, i) => { for (const k in H) if (H[k].test(c) && idx[k] < 0) idx[k] = i; });
+    if (idx.name < 0) idx.name = 0;
+    nz.shift();
+  }
+  const get = (r, k) => idx[k] >= 0 ? String(r[idx[k]] ?? "").trim() : "";
+  return nz.map(r => ({ name: get(r, "name"), district: get(r, "district"), address: get(r, "address"), assignee: get(r, "assignee") })).filter(t => t.name && !t.name.startsWith("(예시)")); // 양식의 예시 줄은 자동으로 건너뛴다
+}
+/** 같은 단지(이름 기준)는 새로 만들지 않고 비어 있지 않은 값만 덮어쓴다. */
+async function addTargets(list) {
+  if (!list.length) { $("tMsg").textContent = "추가할 대상이 없습니다."; return; }
+  let added = 0, updated = 0;
+  const ok = await saveTargets(data => {
+    for (const t of list) {
+      const hit = data.targets.find(x => normName(x.name) === normName(t.name));
+      if (hit) { updated++; for (const k of ["district", "address", "assignee"]) if (t[k]) hit[k] = t[k]; }
+      else { added++; data.targets.push({ id: newId(), ...t }); }
+    }
+  });
+  if (ok) $("tMsg").textContent = `추가 ${added}곳 · 갱신 ${updated}곳`;
+}
+async function loadXlsx() {
+  if (window.XLSX) return;
+  for (const src of ["./lib/xlsx.full.min.js", "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"]) {
+    try { await new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => { s.remove(); no(); }; document.head.appendChild(s); }); if (window.XLSX) return; } catch {}
+  }
+  throw new Error("엑셀 라이브러리를 불러오지 못했습니다 (lib 폴더 확인). CSV나 붙여넣기를 사용하세요.");
+}
+$("tFile").addEventListener("change", async e => {
+  const file = e.target.files[0]; if (!file) return;
+  $("tMsg").textContent = "읽는 중...";
+  try {
+    let rows;
+    if (/\.(xlsx|xls)$/i.test(file.name)) {
+      await loadXlsx();
+      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" });
+    } else rows = (await file.text()).split(/\r?\n/).map(l => l.split(/\t|,/));
+    await addTargets(rowsToTargets(rows));
+  } catch (ex) { $("tMsg").textContent = "실패: " + ex.message; }
+  e.target.value = "";
+});
+/* 엑셀 양식: 열 제목 + 예시 2줄 + 안내 시트. 예시 줄은 지우고 쓰면 된다(예시 단지명으로 올려도 그대로 등록되니 반드시 지울 것). */
+$("tTemplate").onclick = async () => {
+  const head = ["단지명", "시군구", "주소", "담당자"];
+  const sample = [["(예시) 공덕한화꿈에그린", "마포구", "서울특별시 마포구 마포대로10길 22", "김OO"], ["(예시) 마곡수명산파크5단지", "강서구", "", ""]];
+  try {
+    await loadXlsx();
+    const ws = XLSX.utils.aoa_to_sheet([head, ...sample]);
+    ws["!cols"] = [{ wch: 28 }, { wch: 10 }, { wch: 40 }, { wch: 12 }];
+    const guide = XLSX.utils.aoa_to_sheet([
+      ["측정대상 업로드 양식 안내"], [""],
+      ["1. '측정대상' 시트의 예시 두 줄(단지명이 (예시)로 시작)은 지우고 실제 단지를 입력하세요."],
+      ["2. 단지명은 필수입니다. 시군구·주소·담당자는 비워도 됩니다."],
+      ["3. 담당자 이름은 '담당자' 화면에 등록한 이름과 같아야 앱에서 그 담당자에게 보입니다. 비워 두면 웹에서 나중에 배정할 수 있습니다."],
+      ["4. 이미 등록된 단지명과 같으면 새로 만들지 않고 시군구·주소·담당자만 갱신합니다."],
+      ["5. 첫 줄(단지명, 시군구, 주소, 담당자)은 그대로 두세요. 같은 이름이면 열 순서가 달라도 읽힙니다."]]);
+    guide["!cols"] = [{ wch: 110 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "측정대상");
+    XLSX.utils.book_append_sheet(wb, guide, "작성 안내");
+    XLSX.writeFile(wb, "측정대상_양식.xlsx");
+    $("tMsg").textContent = "양식을 내려받았습니다 (측정대상_양식.xlsx).";
+  } catch (e) { // 엑셀 라이브러리를 못 불러오면 CSV 양식으로 대신한다 (엑셀에서 한글이 깨지지 않게 BOM 포함)
+    const csv = "﻿" + [head, ...sample].map(r => r.map(c => '"' + c.replace(/"/g, '""') + '"').join(",")).join("\r\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = "측정대상_양식.csv";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+    $("tMsg").textContent = "엑셀 라이브러리를 못 불러와 CSV 양식으로 내려받았습니다.";
+  }
+};
+$("tAddPaste").onclick = async () => {
+  const rows = $("tPaste").value.split(/\r?\n/).map(l => l.split(/\t|,/));
+  await addTargets(rowsToTargets(rows)); $("tPaste").value = "";
+};
+$("wGen").onclick = () => { $("wCode").value = String(Math.floor(1000 + Math.random() * 9000)); };
+$("wAdd").onclick = async () => {
+  const name = $("wName").value.trim(), code = $("wCode").value.trim() || String(Math.floor(1000 + Math.random() * 9000));
+  if (!name) { alert("이름을 입력하세요."); return; }
+  if (TARGETS.workers.some(w => w.name === name)) { alert("같은 이름의 담당자가 이미 있습니다."); return; }
+  if (await saveTargets(d => d.workers.push({ name, code }))) { $("wName").value = ""; $("wCode").value = ""; }
+};
+["tWorker", "tState"].forEach(id => $(id).onchange = () => drawTargets());
+$("tQ").oninput = () => drawTargets();
+const tSel = new Set(); // 선택한 등록 대상의 id
+const updateTSel = () => { $("tDelSel").textContent = `선택 삭제 (${tSel.size})`; $("tDelSel").disabled = !tSel.size; };
+$("tDelSel").onclick = async () => {
+  if (!tSel.size || !confirm(`선택한 ${tSel.size}곳을 측정대상에서 삭제할까요? (이미 입력된 현장측정 기록은 지워지지 않습니다)`)) return;
+  const ids = new Set(tSel);
+  if (await saveTargets(d => { d.targets = d.targets.filter(x => !ids.has(x.id)); })) tSel.clear();
+  updateTSel();
+};
+$("tDelAll").onclick = async () => {
+  const n = TARGETS.targets.length;
+  if (!n) { alert("등록된 측정대상이 없습니다."); return; }
+  if (!confirm(`등록된 측정대상 ${n}곳을 모두 삭제할까요? 담당자 목록과 이미 입력된 현장측정 기록은 그대로 남습니다.`)) return;
+  if (await saveTargets(d => { d.targets = []; })) tSel.clear();
+  updateTSel();
+};
+$("tChkAll").onchange = e => {
+  const on = e.target.checked, wf = $("tWorker").value, st = $("tState").value, q = $("tQ").value.trim().toLowerCase();
+  for (const s of targetSites()) {
+    const reg = TARGETS.targets.find(t => normName(t.name) === normName(s.name)); if (!reg) continue;
+    if ((!wf || s.assignee === wf) && (!st || (st === "done") === !!(s.appDone || s.manualDone)) && (!q || (s.name + " " + s.district + " " + s.address).toLowerCase().includes(q)))
+      on ? tSel.add(reg.id) : tSel.delete(reg.id);
+  }
+  drawTargets();
+};
+
+function drawTargets() {
+  const sites = targetSites(), cnt = {};
+  sites.forEach(s => { if (s.assignee) cnt[s.assignee] = (cnt[s.assignee] || 0) + 1; });
+  const wb = $("wBody"); wb.innerHTML = "";
+  for (const w of TARGETS.workers) {
+    const tr = document.createElement("tr");
+    [w.name, w.code, cnt[w.name] || 0].forEach((x, i) => { const td = document.createElement("td"); if (i === 2) td.className = "n"; td.textContent = x; tr.appendChild(td); });
+    const td = document.createElement("td"), b = document.createElement("button"); b.textContent = "삭제"; b.className = "danger";
+    b.onclick = () => { if (confirm(`담당자 ${w.name} 을(를) 삭제할까요? 배정된 단지는 담당자 이름만 남습니다.`)) saveTargets(d => { d.workers = d.workers.filter(x => x.name !== w.name); }); };
+    td.appendChild(b); tr.appendChild(td); wb.appendChild(tr);
+  }
+  if (!TARGETS.workers.length) { const tr = document.createElement("tr"), td = document.createElement("td"); td.colSpan = 4; td.textContent = "등록된 담당자가 없습니다."; tr.appendChild(td); wb.appendChild(tr); }
+  // 담당자 필터 선택지
+  const sel = $("tWorker"), cur = sel.value; sel.length = 1;
+  for (const n of new Set([...TARGETS.workers.map(w => w.name), ...Object.keys(cnt)])) { const o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o); }
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : "";
+
+  const q = $("tQ").value.trim().toLowerCase(), wf = $("tWorker").value, st = $("tState").value;
+  const shown = sites.filter(s => (!wf || s.assignee === wf) && (!st || (st === "done") === !!(s.appDone || s.manualDone)) &&
+    (!q || (s.name + " " + s.district + " " + s.address).toLowerCase().includes(q)));
+  $("tCount").textContent = `${sites.length}곳 · 완료 ${sites.filter(s => s.appDone || s.manualDone).length}곳 · 표시 ${shown.length}곳` +
+    (TARGETS.targets.length ? "" : " · (등록 전: 기본 단지 표시 중)");
+  const tb = $("tBody"); tb.innerHTML = "";
+  for (const s of shown) {
+    const tr = document.createElement("tr"), cell = t => { const td = document.createElement("td"); td.textContent = t; tr.appendChild(td); return td; };
+    const reg = TARGETS.targets.find(t => normName(t.name) === normName(s.name));
+    const tdC = cell(""); tdC.className = "adm";
+    if (reg) { // 등록된 대상만 선택해서 삭제할 수 있다
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.style.cssText = "width:auto;margin:0"; cb.checked = tSel.has(reg.id);
+      cb.onchange = () => { cb.checked ? tSel.add(reg.id) : tSel.delete(reg.id); updateTSel(); };
+      tdC.appendChild(cb);
+    }
+    cell(s.name); cell(s.district); cell(s.address || "-");
+    const tdA = cell("");
+    if (isAdmin && reg) {
+      const se = document.createElement("select"); se.style.cssText = "margin:0;padding:2px 4px;width:auto";
+      se.innerHTML = '<option value="">(미배정)</option>';
+      for (const w of TARGETS.workers) { const o = document.createElement("option"); o.value = w.name; o.textContent = w.name; se.appendChild(o); }
+      if (s.assignee && !TARGETS.workers.some(w => w.name === s.assignee)) { const o = document.createElement("option"); o.value = s.assignee; o.textContent = s.assignee + " (미등록)"; se.appendChild(o); }
+      se.value = s.assignee || "";
+      se.onchange = () => saveTargets(d => { const t = d.targets.find(x => x.id === reg.id); if (t) t.assignee = se.value; });
+      tdA.appendChild(se);
+    } else tdA.textContent = s.assignee || "-";
+    const tdS = cell(""), tag = document.createElement("span");
+    const done = s.appDone || s.manualDone;
+    tag.className = "tag " + (done ? "ok" : "none"); tag.textContent = s.appDone ? "완료(앱)" : s.manualDone ? "완료(검사지)" : "미완료"; tdS.appendChild(tag);
+    const tdD = cell(""); tdD.className = "adm";
+    if (reg) { const b = document.createElement("button"); b.textContent = "삭제"; b.className = "danger"; b.onclick = () => { if (confirm(`${s.name} 을(를) 측정대상에서 삭제할까요?`)) saveTargets(d => { d.targets = d.targets.filter(x => x.id !== reg.id); }); }; tdD.appendChild(b); }
+    else { // 앱에서 입력만 된 단지(대상 목록에 없음): 등록하면 담당자 배정·삭제를 할 수 있다
+      const b = document.createElement("button"); b.textContent = "대상에 등록"; b.title = "측정대상으로 등록해 담당자 배정·삭제를 할 수 있게 합니다";
+      b.onclick = () => saveTargets(d => { if (!d.targets.some(x => normName(x.name) === normName(s.name))) d.targets.push({ id: newId(), name: s.name, district: s.district === "미상" ? "" : s.district, address: s.address || "", assignee: "" }); });
+      tdD.appendChild(b);
+    }
+    tb.appendChild(tr);
+  }
+  updateTSel();
+  if (!shown.length) { const tr = document.createElement("tr"), td = document.createElement("td"); td.colSpan = 7; td.textContent = "대상이 없습니다."; tr.appendChild(td); tb.appendChild(tr); }
+}
+
+/* ---------- 현장측정 표 ---------- */
+/* 진단 도구(ev-signal-diagnosis)와 같은 구성: 현황 카드 → 통신사별/시군구별 집계 → 단지별 기록 카드.
+   집계는 "단지" 단위다: 같은 단지에 기록이 여러 건이면 3사 중 가장 나쁜 판정을 그 단지의 판정으로 본다. */
+const GRANK = { shadow: 3, weak: 2, pending: 1, good: 0 };
+let gCarrierSel = "";
+function drawField() {
+  const q = $("gQ").value.trim().toLowerCase(), g = $("gFilter").value;
+  // 단지별로 묶기 (이름 기준, 최신 기록이 대표)
+  const byName = new Map();
+  for (const r of [...FIELD].sort((a, b) => b.ts - a.ts)) {
+    const o = byName.get(r.name) || { name: r.name, latest: r, recs: [], grade: "good" };
+    o.recs.push(r); if (GRANK[r.grade] > GRANK[o.grade]) o.grade = r.grade; byName.set(r.name, o);
+  }
+  const sites = [...byName.values()];
+  const n = k => sites.filter(s => s.grade === k).length;
+  const shadowByCarrier = c => new Set(FIELD.filter(r => r.cv[c].status === "measured" && r.cv[c].rsrp <= -115).map(r => r.name)).size;
+  const stats = [["shadow", "bad", "음영 단지", n("shadow"), "RSRP ≤ -115"], ["weak", "warn", "취약 단지", n("weak"), "-115 초과 ~ -100 이하"],
+    ["good", "ok", "양호 단지", n("good"), "3사 모두 확인"], ["pending", "none", "미측정 포함", n("pending"), "일부 통신사 미측정"]];
+  const box = $("gStats"); box.innerHTML = "";
+  for (const [key, cls, label, num_, sub] of stats) {
+    const b = document.createElement("button"); b.className = "gstat " + cls + (g === key ? " on" : "");
+    b.innerHTML = "<b></b><span></span><br><small></small>";
+    b.querySelector("b").textContent = num_; b.querySelector("span").textContent = label; b.querySelector("small").textContent = sub;
+    b.onclick = () => { $("gFilter").value = g === key ? "" : key; drawField(); };
+    box.appendChild(b);
+  }
+  $("gCarrier").textContent = "통신사별 음영 단지 · " + CARRIERS.map(c => `${c} ${shadowByCarrier(c)}`).join(" · ");
+  const dist = {}; for (const s of sites) if (s.grade === "shadow") dist[s.latest.district || "미상"] = (dist[s.latest.district || "미상"] || 0) + 1;
+  $("gDistrict").textContent = "시군구별 음영 단지 · " + (Object.entries(dist).map(([d, c]) => `${d} ${c}`).join(" · ") || "없음");
+
+  const shown = sites.filter(s => (!g || s.grade === g) &&
+    (!q || s.recs.some(r => (r.name + " " + r.address + " " + r.district + " " + r.memo).toLowerCase().includes(q))));
+  $("gCount").textContent = `단지 ${sites.length}곳 · 기록 ${FIELD.length}건 · 표시 ${shown.length}곳`;
+  const cards = $("gCards"); cards.innerHTML = "";
+  for (const s of shown) {
+    const r = s.latest, el = document.createElement("div"); el.className = "gcard";
+    const h = document.createElement("h3"); const t = document.createElement("span"); t.textContent = r.name;
+    const tag = document.createElement("span"); tag.className = "tag " + GRADE[s.grade][1]; tag.textContent = GRADE[s.grade][0];
+    h.append(t, tag); el.appendChild(h);
+    const meta = document.createElement("div"); meta.className = "meta";
+    meta.textContent = [r.district, [r.floor, r.zone].filter(Boolean).join(" "), fmt(toDate(r.ts)), r.worker ? "측정 " + r.worker : "", s.recs.length > 1 ? `기록 ${s.recs.length}건` : ""].filter(Boolean).join(" · ");
+    el.appendChild(meta);
+    // 3사별 값: 단지에 여러 기록이 있으면 통신사마다 가장 나쁜 값을 보여준다
+    const car = document.createElement("div"); car.className = "gcar";
+    for (const c of CARRIERS) {
+      const ms = s.recs.map(x => x.cv[c]).filter(x => x.status === "measured" && x.rsrp !== null);
+      const worst = ms.length ? ms.reduce((a, b) => b.rsrp < a.rsrp ? b : a) : null;
+      const okAny = s.recs.some(x => x.cv[c].status === "ok");
+      const d = document.createElement("div");
+      d.className = worst ? (worst.rsrp <= -115 ? "bad" : worst.rsrp <= -100 ? "warn" : "ok") : okAny ? "ok" : "";
+      d.innerHTML = "<span></span><b></b><small></small>";
+      d.querySelector("span").textContent = c;
+      d.querySelector("b").textContent = worst ? worst.rsrp : okAny ? "이상없음" : "미측정";
+      d.querySelector("small").textContent = worst && worst.sinr !== null ? "SINR " + worst.sinr : " ";
+      car.appendChild(d);
+    }
+    el.appendChild(car);
+    if (r.address) { const a = document.createElement("div"); a.className = "meta"; a.textContent = r.address; el.appendChild(a); }
+    if (r.memo) { const m = document.createElement("div"); m.textContent = r.memo; el.appendChild(m); }
+    const acts = document.createElement("div"); acts.className = "acts";
+    const photoRec = s.recs.find(x => x.photos.length);
+    if (photoRec) { const b = document.createElement("button"); b.textContent = `사진 ${s.recs.reduce((a, x) => a + x.photos.length, 0)}장`; b.onclick = () => openPhotos(photoRec, 0); acts.appendChild(b); }
+    const pos = s.recs.find(x => x.lat !== null);
+    if (pos) { const b = document.createElement("button"); b.textContent = "지도에서 보기"; b.onclick = () => { setView("map"); $("gMap").checked = true; draw(); M && M.focus(pos); }; acts.appendChild(b); }
+    el.appendChild(acts); cards.appendChild(el);
+  }
+  if (!shown.length) { const e = document.createElement("div"); e.className = "status"; e.textContent = "현장측정 기록이 없습니다."; cards.appendChild(e); }
+}
+$("gQ").addEventListener("input", drawField);
+$("gFilter").addEventListener("change", drawField);
+$("gMap").addEventListener("change", () => { fitted = false; draw(); });
 const rsrpClass = v => v === null || v === undefined ? "none" : v <= -120 ? "bad" : v <= -110 ? "warn" : "ok";
 
 /** 목록에서 기록을 누르면 지도가 그 위치로 이동하고 팝업이 열린다 */
@@ -927,7 +1749,8 @@ function fillSelect(sel, values, labelOf = x => x) {
 }
 function fillFilters() {
   fillSelect($("fDay"), [...new Set(all.map(dayKey))].sort().reverse());
-  fillSelect($("fOp"), [...new Set(all.map(r => r.op).filter(Boolean))].sort());
+  // 통신사 필터: SKT/KT/LGU+ 는 이름 표기가 달라도(예: "LG U+") 한 묶음으로, 그 외 이름은 그대로 나열
+  fillSelect($("fOp"), [...CARRIERS, ...new Set(all.map(r => r.op).filter(o => o && !carrierOfOp(o)))].sort((a, b) => 0));
   fillSelect($("fLv"), [...new Set(all.map(r => r.level))], k => LEVELS[k][0]);
 }
 ["fDay", "fOp", "fLv"].forEach(id => $(id).onchange = drawTable);
@@ -936,7 +1759,7 @@ $("fQ").oninput = drawTable;
 function filtered() {
   const q = $("fQ").value.trim().toLowerCase(), day = $("fDay").value, op = $("fOp").value, lv = $("fLv").value;
   const out = all.filter(r =>
-    (!day || dayKey(r) === day) && (!op || r.op === op) && (!lv || r.level === lv) &&
+    (!day || dayKey(r) === day) && (!op || (CARRIERS.includes(op) ? carrierOfOp(r.op) === op : r.op === op)) && (!lv || r.level === lv) &&
     (!q || [r.address, r.region, r.memo, r.cellId, r.plmn, r.op].join(" ").toLowerCase().includes(q)));
   out.sort((a, b) => {
     const x = a[sortKey], y = b[sortKey];
